@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package rateforge.ratelimit;
+
+option java_package = "com.rateforge.ratelimiter.grpc.proto";
+option java_multiple_files = true;
+
+// -------------------------
+// Shared enums
+// -------------------------
+
+enum Algorithm {
+  FIXED_WINDOW   = 0;
+  SLIDING_WINDOW = 1;
+  TOKEN_BUCKET   = 2;
+}
+
+// -------------------------
+// CheckLimit (RAT-5)
+// -------------------------
+
+message CheckRequest {
+  string client_key = 1;
+  string endpoint   = 2;
+  string policy_id  = 3;  // optional — policy engine resolves if blank
+}
+
+message CheckResponse {
+  bool      allowed     = 1;
+  int64     remaining   = 2;  // slots left in current window
+  int64     reset_ms    = 3;  // ms until window resets (on DENY)
+  string    policy_id   = 4;
+  Algorithm algorithm   = 5;
+  double    latency_ms  = 6;
+}
+
+// -------------------------
+// BatchCheck (RAT-12)
+// -------------------------
+
+message BatchCheckRequest  { repeated CheckRequest  requests  = 1; }
+message BatchCheckResponse { repeated CheckResponse responses = 1; }
+
+// -------------------------
+// GetLimitStatus (RAT-13)
+// -------------------------
+
+message StatusRequest {
+  string client_key = 1;
+  string policy_id  = 2;
+}
+
+message LimitStatus {
+  string    client_key    = 1;
+  string    policy_id     = 2;
+  int64     limit         = 3;
+  int64     current_count = 4;
+  int64     remaining     = 5;
+  double    fill_ratio    = 6;  // 0.0–1.0 (how full the window/bucket is)
+  int64     reset_ms      = 7;
+  Algorithm algorithm     = 8;
+}
+
+// -------------------------
+// RateLimitService
+// -------------------------
+
+service RateLimitService {
+  rpc CheckLimit     (CheckRequest)      returns (CheckResponse);
+  rpc BatchCheck     (BatchCheckRequest) returns (BatchCheckResponse);
+  rpc GetLimitStatus (StatusRequest)     returns (LimitStatus);
+}
