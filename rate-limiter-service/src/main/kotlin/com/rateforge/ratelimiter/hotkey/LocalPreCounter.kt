@@ -1,8 +1,9 @@
 package com.rateforge.ratelimiter.hotkey
 
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.LongAdder
 
@@ -41,18 +42,23 @@ class LocalPreCounter(
         val windowStartMs:    AtomicLong  = AtomicLong(System.currentTimeMillis()),
     )
 
-    private val slots = ConcurrentHashMap<String, Slot>()
+    // Bounded cache: max 100 k unique keys, evict 5 min after last access.
+    // Prevents unbounded heap growth when serving millions of unique API keys.
+    private val slots = Caffeine.newBuilder()
+        .maximumSize(100_000)
+        .expireAfterAccess(5, TimeUnit.MINUTES)
+        .build<String, Slot>()
 
     /** Must be called for every incoming request on this key. */
     fun recordRequest(key: String) {
-        val slot = slots.computeIfAbsent(key) { Slot() }
+        val slot = slots.get(key) { Slot() }
         refreshWindow(slot)
         slot.requestsInWindow.increment()
     }
 
     /** Returns true if this key's request rate exceeds [hotThreshold] req/s. */
     fun isHotKey(key: String): Boolean {
-        val slot = slots[key] ?: return false
+        val slot = slots.getIfPresent(key) ?: return false
         refreshWindow(slot)
         return slot.requestsInWindow.sum() > hotThreshold
     }
@@ -63,7 +69,7 @@ class LocalPreCounter(
      * Returns false if the budget is exhausted — caller must hit Redis.
      */
     fun tryConsumeLocal(key: String): Boolean {
-        val slot = slots[key] ?: return false
+        val slot = slots.getIfPresent(key) ?: return false
         val remaining = slot.localBudget.decrementAndGet()
         if (remaining < 0) {
             // Budget exhausted — reset to 0 and return false so caller refreshes from Redis
@@ -78,15 +84,19 @@ class LocalPreCounter(
      * Adds [amount] slots to the local budget for this key.
      */
     fun grantBudget(key: String, amount: Long) {
-        slots.computeIfAbsent(key) { Slot() }.localBudget.addAndGet(amount)
+        slots.get(key) { Slot() }.localBudget.addAndGet(amount)
         log.debug("Granted local budget key={} amount={}", key, amount)
     }
 
     private fun refreshWindow(slot: Slot) {
-        val now = System.currentTimeMillis()
-        if (now - slot.windowStartMs.get() >= 1_000L) {
-            slot.windowStartMs.set(now)
-            slot.requestsInWindow.reset()
+        val now  = System.currentTimeMillis()
+        val prev = slot.windowStartMs.get()
+        if (now - prev >= 1_000L) {
+            // CAS: only the first thread to win the swap resets the counter —
+            // prevents double-reset when two threads both pass the elapsed check.
+            if (slot.windowStartMs.compareAndSet(prev, now)) {
+                slot.requestsInWindow.reset()
+            }
         }
     }
 }

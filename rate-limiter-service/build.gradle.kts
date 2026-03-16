@@ -29,6 +29,9 @@ dependencies {
     implementation("com.google.protobuf:protobuf-kotlin:$protobufVersion")
     implementation("net.devh:grpc-server-spring-boot-starter:2.15.0.RELEASE")
 
+    // Caffeine — bounded cache for LocalPreCounter hot-key slots
+    implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
+
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")

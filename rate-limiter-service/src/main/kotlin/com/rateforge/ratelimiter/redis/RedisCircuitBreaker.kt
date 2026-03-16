@@ -2,6 +2,7 @@ package com.rateforge.ratelimiter.redis
 
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
@@ -29,10 +30,11 @@ class RedisCircuitBreaker(
 
     enum class State { CLOSED, OPEN, HALF_OPEN }
 
-    private val state        = AtomicReference(State.CLOSED)
-    private val failureCount = AtomicInteger(0)
-    private val successCount = AtomicInteger(0)
-    private val openedAt     = AtomicLong(0L)
+    private val state          = AtomicReference(State.CLOSED)
+    private val failureCount   = AtomicInteger(0)
+    private val successCount   = AtomicInteger(0)
+    private val openedAt       = AtomicLong(0L)
+    private val probeInFlight  = AtomicBoolean(false)  // serialises HALF_OPEN probes
 
     fun currentState(): State = state.get()
 
@@ -65,17 +67,23 @@ class RedisCircuitBreaker(
         return fallback()
     }
 
-    private fun <T> runHalfOpen(operation: () -> T, fallback: () -> T): T = try {
-        val result = operation()
-        if (successCount.incrementAndGet() >= successThreshold) {
-            log.info("Circuit breaker → CLOSED (Redis healthy)")
-            reset()
+    private fun <T> runHalfOpen(operation: () -> T, fallback: () -> T): T {
+        // Only one probe at a time — all other concurrent calls take the fallback path.
+        if (!probeInFlight.compareAndSet(false, true)) return fallback()
+        return try {
+            val result = operation()
+            if (successCount.incrementAndGet() >= successThreshold) {
+                log.info("Circuit breaker → CLOSED (Redis healthy)")
+                reset()
+            }
+            result
+        } catch (ex: Exception) {
+            log.warn("Redis probe failed in HALF_OPEN — reopening circuit: {}", ex.message)
+            trip()
+            fallback()
+        } finally {
+            probeInFlight.set(false)
         }
-        result
-    } catch (ex: Exception) {
-        log.warn("Redis probe failed in HALF_OPEN — reopening circuit: {}", ex.message)
-        trip()
-        fallback()
     }
 
     private fun trip() {
@@ -84,11 +92,13 @@ class RedisCircuitBreaker(
         openedAt.set(System.currentTimeMillis())
         failureCount.set(0)
         successCount.set(0)
+        probeInFlight.set(false)
     }
 
     private fun reset() {
         state.set(State.CLOSED)
         failureCount.set(0)
         successCount.set(0)
+        probeInFlight.set(false)
     }
 }
