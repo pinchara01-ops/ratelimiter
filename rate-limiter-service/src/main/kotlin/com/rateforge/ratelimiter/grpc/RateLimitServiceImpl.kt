@@ -17,6 +17,9 @@ import com.rateforge.ratelimiter.policy.Policy
 import com.rateforge.ratelimiter.policy.PolicyMatchingEngine
 import com.rateforge.ratelimiter.redis.RedisCircuitBreaker
 import io.grpc.Status
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import net.devh.boot.grpc.server.service.GrpcService
 import org.slf4j.LoggerFactory
 
@@ -94,7 +97,10 @@ class RateLimitServiceImpl(
         if (request.requestsList.isEmpty()) {
             return BatchCheckResponse.newBuilder().build()
         }
-        val responses = request.requestsList.map { checkLimit(it) }
+        // RAT-12: fan-out concurrently so batch latency ≈ max(single) not sum(all)
+        val responses = coroutineScope {
+            request.requestsList.map { async { checkLimit(it) } }.awaitAll()
+        }
         return BatchCheckResponse.newBuilder().addAllResponses(responses).build()
     }
 
@@ -146,7 +152,7 @@ class RateLimitServiceImpl(
             .setLatencyMs(latencyMs)
             .build()
 
-    private fun elapsedMs(startNs: Long) = (System.nanoTime() - startNs) / 1_000_000.0
+    private fun elapsedMs(startNs: Long) = (System.nanoTime() - startNs).toDouble() / 1_000_000.0
 
     private fun AlgorithmType.toProto(): ProtoAlgorithm = when (this) {
         AlgorithmType.FIXED_WINDOW   -> ProtoAlgorithm.FIXED_WINDOW

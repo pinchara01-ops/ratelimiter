@@ -5,7 +5,7 @@ import org.springframework.core.ParameterizedTypeReference
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
 import org.springframework.stereotype.Component
-import java.util.UUID
+import java.util.concurrent.ThreadLocalRandom
 
 /**
  * Sliding-window rate limiter (RAT-7).
@@ -40,7 +40,7 @@ class SlidingWindowAlgorithm(
     override fun check(redisKey: String, policy: Policy): CheckResult {
         val nowMs     = System.currentTimeMillis()
         val windowMs  = policy.windowSeconds * 1_000L
-        val entryId   = UUID.randomUUID().toString()
+        val entryId   = "${System.nanoTime()}-${ThreadLocalRandom.current().nextLong()}"
 
         val result = redis.execute(
             checkScript,

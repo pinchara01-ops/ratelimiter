@@ -3,7 +3,8 @@ package com.rateforge.ratelimiter.policy
 import jakarta.annotation.PostConstruct
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.withLock
 
 /**
  * Policy matching engine with priority resolution (RAT-10).
@@ -17,12 +18,16 @@ import java.util.concurrent.CopyOnWriteArrayList
  *  2. Otherwise, find the highest-priority policy whose [clientKeyPattern]
  *     and [endpointPattern] both match.
  *  3. Fall back to [DefaultPolicy.INSTANCE] if nothing matches.
+ *
+ * Thread-safety: register/deregister hold the write lock so all three
+ * mutations (removeIf, add, sort) are seen atomically by concurrent readers.
  */
 @Component
 class PolicyMatchingEngine {
 
-    private val log = LoggerFactory.getLogger(PolicyMatchingEngine::class.java)
-    private val policies = CopyOnWriteArrayList<Policy>()
+    private val log  = LoggerFactory.getLogger(PolicyMatchingEngine::class.java)
+    private val lock = ReentrantReadWriteLock()
+    private val policies = mutableListOf<Policy>()   // guarded by lock
 
     @PostConstruct
     fun init() {
@@ -30,17 +35,19 @@ class PolicyMatchingEngine {
         log.info("PolicyMatchingEngine initialised with default policy")
     }
 
-    /** Register (or replace) a policy. Thread-safe. */
+    /** Register (or replace) a policy. Atomic under write lock. */
     fun register(policy: Policy) {
-        policies.removeIf { it.id == policy.id }
-        policies.add(policy)
-        policies.sortByDescending { it.priority }
+        lock.writeLock().withLock {
+            policies.removeIf { it.id == policy.id }
+            policies.add(policy)
+            policies.sortByDescending { it.priority }
+        }
         log.debug("Registered policy id={} priority={}", policy.id, policy.priority)
     }
 
-    /** Remove a policy by ID. */
+    /** Remove a policy by ID. Atomic under write lock. */
     fun deregister(policyId: String) {
-        val removed = policies.removeIf { it.id == policyId }
+        val removed = lock.writeLock().withLock { policies.removeIf { it.id == policyId } }
         if (removed) log.debug("Deregistered policy id={}", policyId)
     }
 
@@ -51,19 +58,20 @@ class PolicyMatchingEngine {
      * @param endpoint   The request endpoint (e.g. "/api/search").
      * @param policyId   Explicit policy ID hint — takes precedence if non-blank.
      */
-    fun resolve(clientKey: String, endpoint: String, policyId: String?): Policy {
-        if (!policyId.isNullOrBlank()) {
-            return policies.firstOrNull { it.id == policyId }
-                ?: run {
-                    log.warn("Explicit policyId={} not found, falling back to default", policyId)
-                    DefaultPolicy.INSTANCE
-                }
+    fun resolve(clientKey: String, endpoint: String, policyId: String?): Policy =
+        lock.readLock().withLock {
+            if (!policyId.isNullOrBlank()) {
+                return@withLock policies.firstOrNull { it.id == policyId }
+                    ?: run {
+                        log.warn("Explicit policyId={} not found, falling back to default", policyId)
+                        DefaultPolicy.INSTANCE
+                    }
+            }
+            policies.firstOrNull { policy ->
+                (policy.clientKeyPattern == null || policy.clientKeyPattern.matches(clientKey)) &&
+                (policy.endpointPattern  == null || policy.endpointPattern.matches(endpoint))
+            } ?: DefaultPolicy.INSTANCE
         }
-        return policies.firstOrNull { policy ->
-            (policy.clientKeyPattern == null || policy.clientKeyPattern.matches(clientKey)) &&
-            (policy.endpointPattern  == null || policy.endpointPattern.matches(endpoint))
-        } ?: DefaultPolicy.INSTANCE
-    }
 
-    fun allPolicies(): List<Policy> = policies.toList()
+    fun allPolicies(): List<Policy> = lock.readLock().withLock { policies.toList() }
 }
