@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__b805f836-98ea-4b27-b48f-9afd8cf82b3c__list_issues",
+      "mcp__b805f836-98ea-4b27-b48f-9afd8cf82b3c__get_issue",
+      "Bash(./gradlew config-service:spotlessCheck)",
+      "Bash(ls gradlew*)",
+      "Bash(ls \"C:\\\\Users\\\\inchara P\\\\resume-project\\\\server\\\\src\\\\main\\\\kotlin\\\\com\\\\rateforge\\\\grpc\"\" && echo \"---\" && ls \"C:Usersinchara Presume-projectserversrcmainkotlincomrateforge\"\")"
+    ]
+  }
+}

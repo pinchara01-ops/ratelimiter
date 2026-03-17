@@ -1,3 +1,3 @@
 rootProject.name = "rateforge"
 
-include("proto", "server")
+include("proto", "server", "analytics-service", "sdk")

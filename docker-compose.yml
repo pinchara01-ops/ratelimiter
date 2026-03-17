@@ -4,69 +4,85 @@ services:
   redis:
     image: redis:7-alpine
     container_name: rateforge-redis
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
     command: redis-server --save 60 1 --loglevel warning
-    volumes:
-      - redis_data:/data
+    volumes: [redis_data:/data]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - rateforge-network
+      interval: 10s; timeout: 5s; retries: 5
+    networks: [rateforge-network]
 
   postgres:
     image: postgres:16-alpine
     container_name: rateforge-postgres
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-rateforge}
       POSTGRES_USER: ${POSTGRES_USER:-rateforge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rateforge}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    volumes: [postgres_data:/data/postgres]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U rateforge -d rateforge"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - rateforge-network
+      interval: 10s; timeout: 5s; retries: 5
+    networks: [rateforge-network]
 
+  # Unified rate-limiter + config + analytics-pipeline (server/ module)
   rateforge:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: { context: ., dockerfile: Dockerfile }
     container_name: rateforge-server
-    ports:
-      - "9090:9090"
+    ports: ["9090:9090"]
     environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=${POSTGRES_DB:-rateforge}
-      - DB_USER=${POSTGRES_USER:-rateforge}
-      - DB_PASSWORD=${POSTGRES_PASSWORD:-rateforge}
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - GRPC_PORT=9090
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-rateforge}
+      DB_USER: ${POSTGRES_USER:-rateforge}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-rateforge}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      GRPC_PORT: "9090"
     depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      redis:    { condition: service_healthy }
+      postgres: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 9090 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    networks:
-      - rateforge-network
+      interval: 30s; timeout: 10s; retries: 5; start_period: 60s
+    networks: [rateforge-network]
     restart: unless-stopped
+
+  # Analytics read API (GetUsageStats, StreamDecisions, GetTopClients)
+  analytics:
+    build: { context: ., dockerfile: Dockerfile.analytics }
+    container_name: rateforge-analytics
+    ports: ["50052:50052"]
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-rateforge}
+      DATABASE_USER: ${POSTGRES_USER:-rateforge}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-rateforge}
+      GRPC_PORT: "50052"
+    depends_on:
+      rateforge: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 50052 || exit 1"]
+      interval: 30s; timeout: 10s; retries: 5; start_period: 60s
+    networks: [rateforge-network]
+    restart: unless-stopped
+
+  # Next.js dashboard (dev mode; for prod use Vercel)
+  dashboard:
+    image: node:22-alpine
+    container_name: rateforge-dashboard
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports: ["3000:3000"]
+    volumes: ["./dashboard-service:/app"]
+    environment:
+      ANALYTICS_GRPC_URL: analytics:50052
+      CONFIG_GRPC_URL: rateforge:9090
+      RATELIMIT_GRPC_URL: rateforge:9090
+    depends_on:
+      rateforge: { condition: service_healthy }
+      analytics: { condition: service_healthy }
+    networks: [rateforge-network]
 
 volumes:
   redis_data:

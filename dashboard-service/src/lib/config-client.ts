@@ -2,95 +2,104 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import path from "path";
 
-// Proto bundled inside dashboard-service so it's available in all deployment targets
-// (Vercel / Docker — the sibling config-service source is not present at runtime).
+// Proto bundled inside dashboard-service — available in all deployment targets
 const PROTO_PATH = path.resolve(process.cwd(), "src/proto/config.proto");
-const CONFIG_URL = process.env.CONFIG_GRPC_URL ?? "localhost:50053";
+// server/ module exposes ConfigService on the same port as RateLimiterService (9090)
+const CONFIG_URL = process.env.CONFIG_GRPC_URL ?? "localhost:9090";
 const DEADLINE_MS = 5_000;
 
-// ── Lazy initialisation: proto is loaded only on first call, not at import time.
-// This prevents ENOENT boot failures in test environments where the file may be absent.
-
-let _configPkg: any = null;
+let _pkg: any = null;
 function getPkg(): any {
-  if (!_configPkg) {
+  if (!_pkg) {
     const pkgDef = protoLoader.loadSync(PROTO_PATH, {
-      keepCase: false,
-      longs: String,
-      enums: String,
-      defaults: true,
-      oneofs: true,
+      keepCase: false, longs: String, enums: String, defaults: true, oneofs: true,
     });
-    _configPkg = (grpc.loadPackageDefinition(pkgDef) as any)
-      .com.rateforge.config.grpc.proto;
+    // package = "rateforge.v1"
+    _pkg = (grpc.loadPackageDefinition(pkgDef) as any).rateforge.v1;
   }
-  return _configPkg;
+  return _pkg;
 }
 
 let _client: any = null;
 function getClient(): any {
   if (!_client) {
-    _client = new (getPkg().ConfigService)(
-      CONFIG_URL,
-      grpc.credentials.createInsecure()
-    );
+    _client = new (getPkg().ConfigService)(CONFIG_URL, grpc.credentials.createInsecure());
   }
   return _client;
 }
 
-// ── Types
+function call<T>(method: string, req: unknown): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const deadline = new Date(Date.now() + DEADLINE_MS);
+    getClient()[method](req, { deadline }, (err: Error | null, res: T) => {
+      if (err) reject(err); else resolve(res);
+    });
+  });
+}
+
+// ── Types (aligned to proto/config.proto PolicyProto) ─────────────────────────
+
+export type AlgorithmType =
+  | "ALGORITHM_TYPE_FIXED_WINDOW"
+  | "ALGORITHM_TYPE_SLIDING_WINDOW"
+  | "ALGORITHM_TYPE_TOKEN_BUCKET";
+
+export type NoMatchBehavior =
+  | "NO_MATCH_BEHAVIOR_FAIL_OPEN"
+  | "NO_MATCH_BEHAVIOR_FAIL_CLOSED";
 
 export interface PolicyDto {
   id: string;
+  name: string;
+  clientId: string;
+  endpoint: string;
+  method: string;
+  algorithm: AlgorithmType;
   limit: number;
-  windowSeconds: number;
-  algorithm: "FIXED_WINDOW" | "SLIDING_WINDOW" | "TOKEN_BUCKET";
+  windowMs: number;
+  bucketSize: number;
+  refillRate: number;
+  cost: number;
   priority: number;
-  clientKeyPattern: string;
-  endpointPattern: string;
+  noMatchBehavior: NoMatchBehavior;
+  enabled: boolean;
   createdAtMs: string;
   updatedAtMs: string;
 }
 
-// ── Explicit per-method wrappers — no dynamic string dispatch so method name
-//    typos are caught at compile time rather than as runtime TypeErrors.
+/** Friendly display label for algorithm enum values */
+export function algorithmLabel(a: string): string {
+  return a.replace("ALGORITHM_TYPE_", "").replace(/_/g, " ");
+}
 
-export function listPolicies(): Promise<{ policies: PolicyDto[] }> {
-  return new Promise((resolve, reject) => {
-    const deadline = new Date(Date.now() + DEADLINE_MS);
-    getClient().listPolicies({}, { deadline }, (err: Error | null, res: { policies: PolicyDto[] }) => {
-      if (err) reject(err); else resolve(res);
-    });
+// ── API wrappers ──────────────────────────────────────────────────────────────
+
+export function listPolicies(
+  opts: { page?: number; pageSize?: number; enabledOnly?: boolean } = {}
+): Promise<{ policies: PolicyDto[]; totalCount: number }> {
+  return call("listPolicies", {
+    page: opts.page ?? 0,
+    pageSize: opts.pageSize ?? 100,
+    enabledOnly: opts.enabledOnly ?? false,
   });
 }
 
 export function createPolicy(
-  policy: Partial<PolicyDto>
+  req: Omit<PolicyDto, "id" | "createdAtMs" | "updatedAtMs">
 ): Promise<{ policy: PolicyDto }> {
-  return new Promise((resolve, reject) => {
-    const deadline = new Date(Date.now() + DEADLINE_MS);
-    getClient().createPolicy({ policy }, { deadline }, (err: Error | null, res: { policy: PolicyDto }) => {
-      if (err) reject(err); else resolve(res);
-    });
-  });
+  return call("createPolicy", req);
 }
 
 export function updatePolicy(
-  policy: Partial<PolicyDto> & { id: string }
+  req: Partial<PolicyDto> & { id: string }
 ): Promise<{ policy: PolicyDto }> {
-  return new Promise((resolve, reject) => {
-    const deadline = new Date(Date.now() + DEADLINE_MS);
-    getClient().updatePolicy({ policy }, { deadline }, (err: Error | null, res: { policy: PolicyDto }) => {
-      if (err) reject(err); else resolve(res);
-    });
-  });
+  return call("updatePolicy", req);
 }
 
-export function deletePolicy(id: string): Promise<{ deleted: boolean }> {
-  return new Promise((resolve, reject) => {
-    const deadline = new Date(Date.now() + DEADLINE_MS);
-    getClient().deletePolicy({ id }, { deadline }, (err: Error | null, res: { deleted: boolean }) => {
-      if (err) reject(err); else resolve(res);
-    });
-  });
+export function deletePolicy(id: string): Promise<{ success: boolean; message: string }> {
+  return call("deletePolicy", { id });
+}
+
+export function getPolicy(id: string): Promise<{ policy: PolicyDto }> {
+  return call("getPolicy", { id });
 }
