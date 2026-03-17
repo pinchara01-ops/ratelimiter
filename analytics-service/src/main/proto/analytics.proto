@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package rateforge.analytics;
+
+option java_package = "com.rateforge.analytics.grpc.proto";
+option java_multiple_files = true;
+
+// -------------------------
+// Shared enums
+// -------------------------
+
+enum Algorithm {
+  FIXED_WINDOW = 0;
+  SLIDING_WINDOW = 1;
+  TOKEN_BUCKET = 2;
+}
+
+enum DecisionResult {
+  ALLOW = 0;
+  DENY = 1;
+}
+
+// -------------------------
+// GetUsageStats
+// -------------------------
+
+enum TimeRange {
+  ONE_HOUR = 0;
+  SIX_HOURS = 1;
+  ONE_DAY = 2;
+  SEVEN_DAYS = 3;
+  THIRTY_DAYS = 4;
+}
+
+message UsageStatsRequest {
+  string policy_id = 1;       // filter by policy (optional)
+  string client_key = 2;      // filter by client key (optional)
+  TimeRange time_range = 3;
+}
+
+message UsageStats {
+  string policy_id = 1;
+  int64 total_requests = 2;
+  int64 total_allows = 3;
+  int64 total_denies = 4;
+  double deny_rate = 5;          // 0.0 – 1.0
+  double avg_latency_ms = 6;
+  TimeRange time_range = 7;
+}
+
+// -------------------------
+// StreamDecisions
+// -------------------------
+
+message StreamRequest {
+  string policy_id = 1;          // optional filter
+  string client_key = 2;         // optional filter
+  DecisionResult decision_filter = 3; // optional; ALLOW=0 means no filter when not set
+  bool filter_by_decision = 4;   // set true to apply decision_filter
+}
+
+message DecisionEvent {
+  string id = 1;
+  int64 timestamp_ms = 2;
+  string client_key = 3;
+  string endpoint = 4;
+  string policy_id = 5;
+  Algorithm algorithm = 6;
+  DecisionResult decision = 7;
+  double latency_ms = 8;
+}
+
+// -------------------------
+// GetTopClients
+// -------------------------
+
+message TopClientsRequest {
+  TimeRange time_range = 1;
+  int32 limit = 2;           // max number of clients to return (default 10)
+}
+
+message ClientStats {
+  string client_key = 1;
+  int64 total_requests = 2;
+  int64 total_allows = 3;
+  int64 total_denies = 4;
+  double deny_ratio = 5;
+}
+
+message TopClientsList {
+  repeated ClientStats clients = 1;
+  TimeRange time_range = 2;
+}
+
+// -------------------------
+// AnalyticsService
+// -------------------------
+
+service AnalyticsService {
+  // Historical usage stats for a policy or client key
+  rpc GetUsageStats(UsageStatsRequest) returns (UsageStats);
+
+  // Server-streaming live decision feed
+  rpc StreamDecisions(StreamRequest) returns (stream DecisionEvent);
+
+  // Top clients ranked by request volume
+  rpc GetTopClients(TopClientsRequest) returns (TopClientsList);
+}
