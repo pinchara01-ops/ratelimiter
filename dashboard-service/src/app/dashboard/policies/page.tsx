@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PolicyDto } from "@/lib/config-client";
 
 const ALGORITHMS = ["FIXED_WINDOW", "SLIDING_WINDOW", "TOKEN_BUCKET"] as const;
@@ -20,13 +20,14 @@ export default function PoliciesPage() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
 
-  // form state
-  const [editId, setEditId]     = useState<string | null>(null);  // null = create
+  // form state — showForm controls visibility; editId=null means create mode
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId]     = useState<string | null>(null);
   const [form, setForm]         = useState({ ...EMPTY, id: "" });
   const [saving, setSaving]     = useState(false);
   const [formErr, setFormErr]   = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -39,14 +40,15 @@ export default function PoliciesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   function openCreate() {
     setEditId(null);
     setForm({ ...EMPTY, id: "" });
     setFormErr(null);
+    setShowForm(true);
   }
 
   function openEdit(p: PolicyDto) {
@@ -61,6 +63,7 @@ export default function PoliciesPage() {
       endpointPattern: p.endpointPattern,
     });
     setFormErr(null);
+    setShowForm(true);
   }
 
   async function save() {
@@ -78,7 +81,8 @@ export default function PoliciesPage() {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error ?? `HTTP ${res.status}`);
       }
-      setEditId(undefined as unknown as null);
+      setShowForm(false);
+      setEditId(null);
       setForm({ ...EMPTY, id: "" });
       await load();
     } catch (e) {
@@ -122,8 +126,8 @@ export default function PoliciesPage() {
           </button>
         </div>
 
-        {/* Create / Edit form */}
-        {(editId !== undefined) && (
+        {/* Create / Edit form — only shown when user explicitly clicks New/Edit */}
+        {showForm && (
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 space-y-4">
             <h2 className="text-lg font-semibold">{editId ? `Edit: ${editId}` : "Create Policy"}</h2>
             <div className="grid grid-cols-2 gap-4">
@@ -204,7 +208,7 @@ export default function PoliciesPage() {
                 {saving ? "Saving…" : editId ? "Update" : "Create"}
               </button>
               <button
-                onClick={() => { setEditId(undefined as unknown as null); }}
+                onClick={() => { setShowForm(false); setEditId(null); }}
                 className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm transition-colors"
               >
                 Cancel

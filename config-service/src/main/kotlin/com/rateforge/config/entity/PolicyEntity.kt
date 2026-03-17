@@ -3,6 +3,8 @@ package com.rateforge.config.entity
 import jakarta.persistence.*
 import java.time.Instant
 
+
+
 @Entity
 @Table(name = "policies")
 class PolicyEntity(
@@ -33,4 +35,10 @@ class PolicyEntity(
 
     @Column(name = "updated_at", nullable = false)
     var updatedAt: Instant = Instant.now(),
-)
+) {
+    /** Automatically refreshes updated_at on every flush — no manual set required in service code. */
+    @PreUpdate
+    fun onUpdate() {
+        updatedAt = Instant.now()
+    }
+}
