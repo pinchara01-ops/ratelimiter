@@ -2,24 +2,35 @@ import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
 import path from "path";
 
-const PROTO_PATH = path.resolve(process.cwd(), "../config-service/src/main/proto/config.proto");
+// Proto bundled inside dashboard-service so it's available in all deployment targets
+// (Vercel / Docker — the sibling config-service source is not present at runtime).
+const PROTO_PATH = path.resolve(process.cwd(), "src/proto/config.proto");
 const CONFIG_URL = process.env.CONFIG_GRPC_URL ?? "localhost:50053";
 const DEADLINE_MS = 5_000;
 
-const pkgDef = protoLoader.loadSync(PROTO_PATH, {
-  keepCase: false,
-  longs: String,
-  enums: String,
-  defaults: true,
-  oneofs: true,
-});
-const configPkg = (grpc.loadPackageDefinition(pkgDef) as any)
-  .com.rateforge.config.grpc.proto;
+// ── Lazy initialisation: proto is loaded only on first call, not at import time.
+// This prevents ENOENT boot failures in test environments where the file may be absent.
+
+let _configPkg: any = null;
+function getPkg(): any {
+  if (!_configPkg) {
+    const pkgDef = protoLoader.loadSync(PROTO_PATH, {
+      keepCase: false,
+      longs: String,
+      enums: String,
+      defaults: true,
+      oneofs: true,
+    });
+    _configPkg = (grpc.loadPackageDefinition(pkgDef) as any)
+      .com.rateforge.config.grpc.proto;
+  }
+  return _configPkg;
+}
 
 let _client: any = null;
 function getClient(): any {
   if (!_client) {
-    _client = new configPkg.ConfigService(
+    _client = new (getPkg().ConfigService)(
       CONFIG_URL,
       grpc.credentials.createInsecure()
     );
@@ -27,15 +38,7 @@ function getClient(): any {
   return _client;
 }
 
-function call<T>(method: string, req: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const deadline = new Date(Date.now() + DEADLINE_MS);
-    getClient()[method](req, { deadline }, (err: Error | null, res: T) => {
-      if (err) reject(err);
-      else resolve(res);
-    });
-  });
-}
+// ── Types
 
 export interface PolicyDto {
   id: string;
@@ -49,18 +52,45 @@ export interface PolicyDto {
   updatedAtMs: string;
 }
 
+// ── Explicit per-method wrappers — no dynamic string dispatch so method name
+//    typos are caught at compile time rather than as runtime TypeErrors.
+
 export function listPolicies(): Promise<{ policies: PolicyDto[] }> {
-  return call("listPolicies", {});
+  return new Promise((resolve, reject) => {
+    const deadline = new Date(Date.now() + DEADLINE_MS);
+    getClient().listPolicies({}, { deadline }, (err: Error | null, res: { policies: PolicyDto[] }) => {
+      if (err) reject(err); else resolve(res);
+    });
+  });
 }
 
-export function createPolicy(policy: Partial<PolicyDto>): Promise<{ policy: PolicyDto }> {
-  return call("createPolicy", { policy });
+export function createPolicy(
+  policy: Partial<PolicyDto>
+): Promise<{ policy: PolicyDto }> {
+  return new Promise((resolve, reject) => {
+    const deadline = new Date(Date.now() + DEADLINE_MS);
+    getClient().createPolicy({ policy }, { deadline }, (err: Error | null, res: { policy: PolicyDto }) => {
+      if (err) reject(err); else resolve(res);
+    });
+  });
 }
 
-export function updatePolicy(policy: Partial<PolicyDto> & { id: string }): Promise<{ policy: PolicyDto }> {
-  return call("updatePolicy", { policy });
+export function updatePolicy(
+  policy: Partial<PolicyDto> & { id: string }
+): Promise<{ policy: PolicyDto }> {
+  return new Promise((resolve, reject) => {
+    const deadline = new Date(Date.now() + DEADLINE_MS);
+    getClient().updatePolicy({ policy }, { deadline }, (err: Error | null, res: { policy: PolicyDto }) => {
+      if (err) reject(err); else resolve(res);
+    });
+  });
 }
 
 export function deletePolicy(id: string): Promise<{ deleted: boolean }> {
-  return call("deletePolicy", { id });
+  return new Promise((resolve, reject) => {
+    const deadline = new Date(Date.now() + DEADLINE_MS);
+    getClient().deletePolicy({ id }, { deadline }, (err: Error | null, res: { deleted: boolean }) => {
+      if (err) reject(err); else resolve(res);
+    });
+  });
 }
