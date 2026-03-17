@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package rateforge.v1;
+
+option java_package = "com.rateforge.proto";
+option java_outer_classname = "RateLimiterProto";
+option java_multiple_files = true;
+
+service RateLimiterService {
+  rpc CheckLimit(CheckLimitRequest) returns (CheckLimitResponse);
+  rpc BatchCheck(BatchCheckRequest) returns (BatchCheckResponse);
+  rpc GetLimitStatus(GetLimitStatusRequest) returns (GetLimitStatusResponse);
+}
+
+message CheckLimitRequest {
+  string client_id = 1;
+  string endpoint = 2;
+  string method = 3;
+  int64 cost = 4;
+  map<string, string> metadata = 5;
+}
+
+message CheckLimitResponse {
+  bool allowed = 1;
+  int64 remaining = 2;
+  int64 reset_at_ms = 3;
+  string policy_id = 4;
+  string reason = 5;
+}
+
+message BatchCheckRequest {
+  repeated CheckLimitRequest requests = 1;
+}
+
+message BatchCheckResponse {
+  repeated CheckLimitResponse responses = 1;
+}
+
+message GetLimitStatusRequest {
+  string client_id = 1;
+  string endpoint = 2;
+  string method = 3;
+}
+
+message GetLimitStatusResponse {
+  string client_id = 1;
+  string endpoint = 2;
+  string method = 3;
+  int64 remaining = 4;
+  int64 reset_at_ms = 5;
+  string policy_id = 6;
+  bool policy_found = 7;
+}

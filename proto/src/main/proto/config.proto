@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package rateforge.v1;
+
+option java_package = "com.rateforge.proto";
+option java_outer_classname = "ConfigProto";
+option java_multiple_files = true;
+
+service ConfigService {
+  rpc CreatePolicy(CreatePolicyRequest) returns (PolicyResponse);
+  rpc UpdatePolicy(UpdatePolicyRequest) returns (PolicyResponse);
+  rpc DeletePolicy(DeletePolicyRequest) returns (DeletePolicyResponse);
+  rpc GetPolicy(GetPolicyRequest) returns (PolicyResponse);
+  rpc ListPolicies(ListPoliciesRequest) returns (ListPoliciesResponse);
+}
+
+enum AlgorithmTypeProto {
+  ALGORITHM_TYPE_UNSPECIFIED = 0;
+  ALGORITHM_TYPE_FIXED_WINDOW = 1;
+  ALGORITHM_TYPE_SLIDING_WINDOW = 2;
+  ALGORITHM_TYPE_TOKEN_BUCKET = 3;
+}
+
+enum NoMatchBehaviorProto {
+  NO_MATCH_BEHAVIOR_UNSPECIFIED = 0;
+  NO_MATCH_BEHAVIOR_FAIL_OPEN = 1;
+  NO_MATCH_BEHAVIOR_FAIL_CLOSED = 2;
+}
+
+message PolicyProto {
+  string id = 1;
+  string name = 2;
+  string client_id = 3;
+  string endpoint = 4;
+  string method = 5;
+  AlgorithmTypeProto algorithm = 6;
+  int64 limit = 7;
+  int64 window_ms = 8;
+  int64 bucket_size = 9;
+  double refill_rate = 10;
+  int64 cost = 11;
+  int32 priority = 12;
+  NoMatchBehaviorProto no_match_behavior = 13;
+  bool enabled = 14;
+  int64 created_at_ms = 15;
+  int64 updated_at_ms = 16;
+}
+
+message CreatePolicyRequest {
+  string name = 1;
+  string client_id = 2;
+  string endpoint = 3;
+  string method = 4;
+  AlgorithmTypeProto algorithm = 5;
+  int64 limit = 6;
+  int64 window_ms = 7;
+  int64 bucket_size = 8;
+  double refill_rate = 9;
+  int64 cost = 10;
+  int32 priority = 11;
+  NoMatchBehaviorProto no_match_behavior = 12;
+  bool enabled = 13;
+}
+
+message UpdatePolicyRequest {
+  string id = 1;
+  string name = 2;
+  string client_id = 3;
+  string endpoint = 4;
+  string method = 5;
+  AlgorithmTypeProto algorithm = 6;
+  int64 limit = 7;
+  int64 window_ms = 8;
+  int64 bucket_size = 9;
+  double refill_rate = 10;
+  int64 cost = 11;
+  int32 priority = 12;
+  NoMatchBehaviorProto no_match_behavior = 13;
+  bool enabled = 14;
+}
+
+message DeletePolicyRequest {
+  string id = 1;
+}
+
+message DeletePolicyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetPolicyRequest {
+  string id = 1;
+}
+
+message PolicyResponse {
+  PolicyProto policy = 1;
+}
+
+message ListPoliciesRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  bool enabled_only = 3;
+}
+
+message ListPoliciesResponse {
+  repeated PolicyProto policies = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
