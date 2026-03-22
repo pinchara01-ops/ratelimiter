@@ -30,7 +30,10 @@ export default function DashboardPage() {
   useEffect(() => {
     setStatsLoading(true);
     fetch(`/api/stats?timeRange=${timeRange}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data) => setStats(data as UsageStats))
       .catch(() => setStats(null))
       .finally(() => setStatsLoading(false));

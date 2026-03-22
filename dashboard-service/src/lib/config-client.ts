@@ -5,7 +5,7 @@ import path from "path";
 // Proto bundled inside dashboard-service — available in all deployment targets
 const PROTO_PATH = path.resolve(process.cwd(), "src/proto/config.proto");
 // server/ module exposes ConfigService on the same port as RateLimiterService (9090)
-const CONFIG_URL = process.env.CONFIG_GRPC_URL ?? "localhost:9090";
+const CONFIG_URL = process.env.CONFIG_GRPC_URL ?? "127.0.0.1:9090";
 const DEADLINE_MS = 5_000;
 
 let _pkg: any = null;
@@ -38,39 +38,14 @@ function call<T>(method: string, req: unknown): Promise<T> {
 }
 
 // ── Types (aligned to proto/config.proto PolicyProto) ─────────────────────────
-
-export type AlgorithmType =
-  | "ALGORITHM_TYPE_FIXED_WINDOW"
-  | "ALGORITHM_TYPE_SLIDING_WINDOW"
-  | "ALGORITHM_TYPE_TOKEN_BUCKET";
-
-export type NoMatchBehavior =
-  | "NO_MATCH_BEHAVIOR_FAIL_OPEN"
-  | "NO_MATCH_BEHAVIOR_FAIL_CLOSED";
-
-export interface PolicyDto {
-  id: string;
-  name: string;
-  clientId: string;
-  endpoint: string;
-  method: string;
-  algorithm: AlgorithmType;
-  limit: number;
-  windowMs: number;
-  bucketSize: number;
-  refillRate: number;
-  cost: number;
-  priority: number;
-  noMatchBehavior: NoMatchBehavior;
-  enabled: boolean;
-  createdAtMs: string;
-  updatedAtMs: string;
-}
-
-/** Friendly display label for algorithm enum values */
-export function algorithmLabel(a: string): string {
-  return a.replace("ALGORITHM_TYPE_", "").replace(/_/g, " ");
-}
+// Re-exported from config-types.ts so Client Components can import types
+// without pulling in this gRPC-heavy module.
+export type {
+  AlgorithmType,
+  NoMatchBehavior,
+  PolicyDto,
+} from "./config-types";
+export { algorithmLabel } from "./config-types";
 
 // ── API wrappers ──────────────────────────────────────────────────────────────
 

@@ -20,21 +20,29 @@ class AnalyticsServiceImpl(
     private val log = LoggerFactory.getLogger(AnalyticsServiceImpl::class.java)
 
     override suspend fun getUsageStats(request: UsageStatsRequest): UsageStats {
-        val since    = request.timeRange.toSince()
-        val policyId = request.policyId.takeIf { it.isNotBlank() }
-        val clientId = request.clientId.takeIf { it.isNotBlank() }
-        val stats = try {
-            repository.getAggregatedStats(policyId, clientId, since)
+        try {
+            val since    = request.timeRange.toSince()
+            val policyId = request.policyId.takeIf { it.isNotBlank() }
+            val clientId = request.clientId.takeIf { it.isNotBlank() }
+            log.info("GetUsageStats policyId={} clientId={} since={}", policyId, clientId, since)
+            val stats = repository.getAggregatedStats(policyId, clientId, since)
+            val total   = stats.totalRequests ?: 0L
+            val allows  = stats.totalAllows   ?: 0L
+            val denies  = stats.totalDenies   ?: 0L
+            val latency = stats.avgLatencyMs  ?: 0.0
+            val pid     = stats.policyId      ?: ""
+            log.info("GetUsageStats query OK total={} allows={} denies={} latency={}", total, allows, denies, latency)
+            return UsageStats.newBuilder()
+                .setPolicyId(pid).setTotalRequests(total)
+                .setTotalAllows(allows).setTotalDenies(denies)
+                .setDenyRate(if (total > 0) denies.toDouble() / total else 0.0)
+                .setAvgLatencyMs(latency).setTimeRange(request.timeRange).build()
         } catch (ex: Exception) {
-            log.error("GetUsageStats query failed", ex)
-            throw Status.INTERNAL.withDescription("Failed to fetch usage stats").asRuntimeException()
+            log.error("GetUsageStats FAILED: {}", ex.message, ex)
+            throw Status.INTERNAL
+                .withDescription("GetUsageStats failed: ${ex.javaClass.simpleName}: ${ex.message}")
+                .asRuntimeException()
         }
-        val total = stats.totalRequests; val denies = stats.totalDenies
-        return UsageStats.newBuilder()
-            .setPolicyId(stats.policyId).setTotalRequests(total)
-            .setTotalAllows(stats.totalAllows).setTotalDenies(denies)
-            .setDenyRate(if (total > 0) denies.toDouble() / total else 0.0)
-            .setAvgLatencyMs(stats.avgLatencyMs).setTimeRange(request.timeRange).build()
     }
 
     // DB-poll streaming — server/ writes events via AnalyticsPipeline;

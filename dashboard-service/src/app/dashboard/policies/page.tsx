@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import type { PolicyDto, AlgorithmType } from "@/lib/config-client";
-import { algorithmLabel } from "@/lib/config-client";
+import type { PolicyDto, AlgorithmType } from "@/lib/config-types";
+import { algorithmLabel } from "@/lib/config-types";
 
 const ALGORITHMS: AlgorithmType[] = ["ALGORITHM_TYPE_FIXED_WINDOW","ALGORITHM_TYPE_SLIDING_WINDOW","ALGORITHM_TYPE_TOKEN_BUCKET"];
 const ALG_BADGE: Record<string,string> = {

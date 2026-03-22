@@ -12,11 +12,11 @@ interface DecisionEventRepository : JpaRepository<DecisionEventEntity, UUID> {
 
     @Query(value = """
         SELECT
-            COALESCE(CAST(:policyId AS text), '')        AS policy_id,
-            COUNT(*)                                      AS total_requests,
-            SUM(CASE WHEN allowed     THEN 1 ELSE 0 END) AS total_allows,
-            SUM(CASE WHEN NOT allowed THEN 1 ELSE 0 END) AS total_denies,
-            COALESCE(AVG(latency_us) / 1000.0, 0)        AS avg_latency_ms
+            COALESCE(CAST(:policyId AS text), '')               AS policyId,
+            COUNT(*)                                             AS totalRequests,
+            COALESCE(SUM(CASE WHEN allowed     THEN 1 ELSE 0 END), 0) AS totalAllows,
+            COALESCE(SUM(CASE WHEN NOT allowed THEN 1 ELSE 0 END), 0) AS totalDenies,
+            COALESCE(AVG(latency_us) / 1000.0, 0)               AS avgLatencyMs
         FROM decision_events
         WHERE (:policyId IS NULL OR policy_id = CAST(:policyId AS uuid))
           AND (:clientId IS NULL OR client_id  = :clientId)
@@ -29,10 +29,10 @@ interface DecisionEventRepository : JpaRepository<DecisionEventEntity, UUID> {
     ): AggregatedStatsProjection
 
     @Query(value = """
-        SELECT client_id,
-               COUNT(*)                                              AS total_requests,
-               SUM(CASE WHEN allowed     THEN 1 ELSE 0 END)         AS total_allows,
-               SUM(CASE WHEN NOT allowed THEN 1 ELSE 0 END)         AS total_denies
+        SELECT client_id                                             AS clientId,
+               COUNT(*)                                              AS totalRequests,
+               SUM(CASE WHEN allowed     THEN 1 ELSE 0 END)         AS totalAllows,
+               SUM(CASE WHEN NOT allowed THEN 1 ELSE 0 END)         AS totalDenies
         FROM decision_events
         WHERE occurred_at >= :since
         GROUP BY client_id
@@ -65,8 +65,8 @@ interface DecisionEventRepository : JpaRepository<DecisionEventEntity, UUID> {
 }
 
 interface AggregatedStatsProjection {
-    val policyId: String; val totalRequests: Long
-    val totalAllows: Long; val totalDenies: Long; val avgLatencyMs: Double
+    val policyId: String?; val totalRequests: Long?
+    val totalAllows: Long?; val totalDenies: Long?; val avgLatencyMs: Double?
 }
 
 interface ClientStatsProjection {

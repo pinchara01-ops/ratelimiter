@@ -3,7 +3,7 @@ import * as protoLoader from "@grpc/proto-loader";
 import path from "path";
 
 const ANALYTICS_PROTO = path.resolve(process.cwd(), "src/proto/analytics.proto");
-const GRPC_URL = process.env.ANALYTICS_GRPC_URL ?? "localhost:50052";
+const GRPC_URL = process.env.ANALYTICS_GRPC_URL ?? "127.0.0.1:50052";
 const DEADLINE_MS = 5_000;
 
 let _analyticsClient: any = null;
