@@ -24,29 +24,27 @@ export async function GET(req: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
-      // Singleton client — do NOT call client.close() here; it's shared across requests
-      const call = streamDecisions(policyId, clientKey, decisionFilter, filterByDecision);
+      const cancel = streamDecisions(
+        { policyId: policyId || undefined, clientId: clientKey || undefined },
+        (event: unknown) => {
+          const payload = `data: ${JSON.stringify(event)}\n\n`;
+          controller.enqueue(encoder.encode(payload));
+        },
+        (err: Error) => {
+          console.error("[/api/stream] gRPC stream error:", err.message);
+          controller.enqueue(
+            encoder.encode(`event: error\ndata: ${err.message}\n\n`)
+          );
+          controller.close();
+        },
+        () => {
+          controller.close();
+        }
+      );
 
-      call.on("data", (event: unknown) => {
-        const payload = `data: ${JSON.stringify(event)}\n\n`;
-        controller.enqueue(encoder.encode(payload));
-      });
-
-      call.on("error", (err: Error) => {
-        console.error("[/api/stream] gRPC stream error:", err.message);
-        controller.enqueue(
-          encoder.encode(`event: error\ndata: ${err.message}\n\n`)
-        );
-        controller.close();
-      });
-
-      call.on("end", () => {
-        controller.close();
-      });
-
-      // Cancel this call (not the shared channel) when the browser disconnects
+      // Cancel this call when the browser disconnects
       req.signal.addEventListener("abort", () => {
-        call.cancel();
+        cancel();
         controller.close();
       });
     },
