@@ -36,46 +36,54 @@ class ConfigGrpcService(
     private val log = LoggerFactory.getLogger(ConfigGrpcService::class.java)
 
     override suspend fun createPolicy(request: CreatePolicyRequest): PolicyResponse {
-        if (request.name.isBlank()) {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Policy name is required"))
-        }
-        if (policyRepository.existsByName(request.name)) {
-            throw StatusRuntimeException(Status.ALREADY_EXISTS.withDescription("Policy with name '${request.name}' already exists"))
-        }
-
-        val algorithm = request.algorithm.toDomain()
-            ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
-
-        if (algorithm == AlgorithmType.TOKEN_BUCKET) {
-            if (request.bucketSize <= 0) {
-                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires bucketSize > 0"))
+        log.info("createPolicy called: name={} algorithm={}", request.name, request.algorithm)
+        try {
+            if (request.name.isBlank()) {
+                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Policy name is required"))
             }
-            if (request.refillRate <= 0.0) {
-                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires refillRate > 0"))
+            if (policyRepository.existsByName(request.name)) {
+                throw StatusRuntimeException(Status.ALREADY_EXISTS.withDescription("Policy with name '${request.name}' already exists"))
             }
+
+            val algorithm = request.algorithm.toDomain()
+                ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
+
+            if (algorithm == AlgorithmType.TOKEN_BUCKET) {
+                if (request.bucketSize <= 0) {
+                    throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires bucketSize > 0"))
+                }
+                if (request.refillRate <= 0.0) {
+                    throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires refillRate > 0"))
+                }
+            }
+
+            val entity = PolicyEntity(
+                name = request.name,
+                clientId = request.clientId.ifEmpty { "*" },
+                endpoint = request.endpoint.ifEmpty { "*" },
+                method = request.method.ifEmpty { "*" },
+                algorithm = algorithm,
+                limit = request.limit,
+                windowMs = request.windowMs,
+                bucketSize = if (request.bucketSize > 0) request.bucketSize else null,
+                refillRate = if (request.refillRate > 0.0) request.refillRate else null,
+                cost = if (request.cost > 0) request.cost else 1L,
+                priority = if (request.priority > 0) request.priority else 100,
+                noMatchBehavior = request.noMatchBehavior.toDomain(),
+                enabled = request.enabled
+            )
+            log.info("createPolicy saving entity: algorithm={} limit={} windowMs={}", entity.algorithm, entity.limit, entity.windowMs)
+            val saved = policyRepository.save(entity)
+            policyCache.invalidate()
+
+            log.info("Created policy: id={} name={}", saved.id, saved.name)
+            return policyResponse { policy = saved.toDomain().toProto() }
+        } catch (ex: StatusRuntimeException) {
+            throw ex
+        } catch (ex: Exception) {
+            log.error("createPolicy FAILED: {}", ex.message, ex)
+            throw Status.INTERNAL.withDescription("createPolicy failed: ${ex.javaClass.simpleName}: ${ex.message}").asRuntimeException()
         }
-
-        val entity = PolicyEntity(
-            name = request.name,
-            clientId = request.clientId.ifEmpty { "*" },
-            endpoint = request.endpoint.ifEmpty { "*" },
-            method = request.method.ifEmpty { "*" },
-            algorithm = algorithm,
-            limit = request.limit,
-            windowMs = request.windowMs,
-            bucketSize = if (request.bucketSize > 0) request.bucketSize else null,
-            refillRate = if (request.refillRate > 0.0) request.refillRate else null,
-            cost = if (request.cost > 0) request.cost else 1L,
-            priority = if (request.priority > 0) request.priority else 100,
-            noMatchBehavior = request.noMatchBehavior.toDomain(),
-            enabled = request.enabled
-        )
-
-        val saved = policyRepository.save(entity)
-        policyCache.invalidate()
-
-        log.info("Created policy: id={} name={}", saved.id, saved.name)
-        return policyResponse { policy = saved.toDomain().toProto() }
     }
 
     override suspend fun updatePolicy(request: UpdatePolicyRequest): PolicyResponse {

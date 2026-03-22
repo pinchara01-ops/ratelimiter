@@ -1,0 +1,18 @@
+# RAT-23: Fly.io deployment — RateForge analytics service (gRPC port 50052)
+app = "rateforge-analytics"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.analytics"
+
+[env]
+  GRPC_PORT = "50052"
+  DB_PORT   = "5432"
+
+[[services]]
+  protocol      = "tcp"
+  internal_port = 50052
+
+  [[services.ports]]
+    port = 50052
+    handlers = ["tcp"]

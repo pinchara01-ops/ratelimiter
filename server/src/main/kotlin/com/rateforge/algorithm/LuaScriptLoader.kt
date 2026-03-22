@@ -14,28 +14,28 @@ class LuaScriptLoader(
 ) {
     private val log = LoggerFactory.getLogger(LuaScriptLoader::class.java)
 
-    lateinit var fixedWindowSha: String
+    final lateinit var fixedWindowSha: String
         private set
 
-    lateinit var slidingWindowSha: String
+    final lateinit var slidingWindowSha: String
         private set
 
-    lateinit var tokenBucketSha: String
+    final lateinit var tokenBucketSha: String
         private set
 
-    lateinit var tokenBucketStatusSha: String
+    final lateinit var tokenBucketStatusSha: String
         private set
 
-    lateinit var fixedWindowScript: DefaultRedisScript<List<*>>
+    final lateinit var fixedWindowScript: DefaultRedisScript<List<*>>
         private set
 
-    lateinit var slidingWindowScript: DefaultRedisScript<List<*>>
+    final lateinit var slidingWindowScript: DefaultRedisScript<List<*>>
         private set
 
-    lateinit var tokenBucketScript: DefaultRedisScript<List<*>>
+    final lateinit var tokenBucketScript: DefaultRedisScript<List<*>>
         private set
 
-    lateinit var tokenBucketStatusScript: DefaultRedisScript<Long>
+    final lateinit var tokenBucketStatusScript: DefaultRedisScript<Long>
         private set
 
     @PostConstruct
@@ -77,7 +77,7 @@ class LuaScriptLoader(
 
     private fun scriptLoad(scriptContent: String): String {
         return redisTemplate.execute { connection ->
-            connection.serverCommands().scriptLoad(scriptContent.toByteArray())
+            connection.scriptingCommands().scriptLoad(scriptContent.toByteArray())
                 ?: throw IllegalStateException("SCRIPT LOAD returned null")
         } ?: throw IllegalStateException("Failed to load script into Redis")
     }

@@ -1,0 +1,15 @@
+FROM eclipse-temurin:21-jre-alpine AS runtime
+
+WORKDIR /app
+
+COPY analytics-service/build/libs/*-SNAPSHOT.jar app.jar
+
+EXPOSE 50052
+
+ENV DB_HOST=localhost DB_PORT=5432 DB_NAME=rateforge \
+    DB_USER=rateforge DB_PASSWORD=rateforge GRPC_PORT=50052
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-jar", "app.jar"]

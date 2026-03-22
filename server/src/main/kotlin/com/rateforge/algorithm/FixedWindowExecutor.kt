@@ -2,7 +2,7 @@ package com.rateforge.algorithm
 
 import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.RedisTemplate
-import org.springframework.data.redis.core.RedisSystemException
+import org.springframework.data.redis.RedisSystemException
 import org.springframework.stereotype.Component
 import java.time.Instant
 
