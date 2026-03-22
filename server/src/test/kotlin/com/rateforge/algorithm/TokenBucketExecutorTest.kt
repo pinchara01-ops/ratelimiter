@@ -27,7 +27,7 @@ class TokenBucketExecutorTest {
     @Test
     fun `bucket has tokens - request allowed`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 9L, 0L)
 
         val result = executor.checkLimit("client1", "/api/test", bucketSize = 10L, refillRate = 1.0)
@@ -40,7 +40,7 @@ class TokenBucketExecutorTest {
     @Test
     fun `burst - full bucket allows many requests rapidly`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returnsMany (10 downTo 1).map { remaining ->
             listOf(1L, remaining.toLong() - 1L, 0L)
         }
@@ -56,7 +56,7 @@ class TokenBucketExecutorTest {
     fun `empty bucket - request denied`() {
         val resetAtMs = System.currentTimeMillis() + 1000L
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(0L, 0L, resetAtMs)
 
         val result = executor.checkLimit("client1", "/api/test", bucketSize = 10L, refillRate = 1.0)
@@ -71,7 +71,7 @@ class TokenBucketExecutorTest {
         val now = System.currentTimeMillis()
 
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returnsMany listOf(
             listOf(0L, 0L, now + 5000L),   // bucket empty
             listOf(1L, 4L, 0L)              // after refill (5 tokens added)
@@ -90,7 +90,7 @@ class TokenBucketExecutorTest {
     fun `token bucket keys use hash tag for cluster slot pinning`() {
         val keysSlot = slot<List<String>>()
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 9L, 0L)
 
         executor.checkLimit("myClient", "/api/endpoint", bucketSize = 10L, refillRate = 2.0)
@@ -107,7 +107,7 @@ class TokenBucketExecutorTest {
     @Test
     fun `cost greater than 1 consumes multiple tokens`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 5L, 0L)
 
         val result = executor.checkLimit("client1", "/api/test", bucketSize = 10L, refillRate = 1.0, cost = 5L)
@@ -119,7 +119,7 @@ class TokenBucketExecutorTest {
     @Test
     fun `insufficient tokens for cost - request denied`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(0L, 3L, System.currentTimeMillis() + 2000L)
 
         // Only 3 tokens available, cost is 5

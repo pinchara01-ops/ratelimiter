@@ -28,7 +28,7 @@ class FixedWindowExecutorTest {
     fun `happy path - request allowed when under limit`() {
         val keysSlot = slot<List<String>>()
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 9L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
@@ -41,7 +41,7 @@ class FixedWindowExecutorTest {
     @Test
     fun `over limit - request denied`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(0L, 0L, System.currentTimeMillis() + 30000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
@@ -54,7 +54,7 @@ class FixedWindowExecutorTest {
     @Test
     fun `cost greater than 1 - remaining decreases by cost`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 5L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L, cost = 5L)
@@ -67,7 +67,7 @@ class FixedWindowExecutorTest {
     fun `window expiry - new window starts fresh`() {
         // First call - window full
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returnsMany listOf(
             listOf(0L, 0L, System.currentTimeMillis() + 1000L),
             listOf(1L, 9L, System.currentTimeMillis() + 60000L)
@@ -85,7 +85,7 @@ class FixedWindowExecutorTest {
     @Test
     fun `exact limit - last request allowed, next denied`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returnsMany listOf(
             listOf(1L, 0L, System.currentTimeMillis() + 60000L), // exactly at limit
             listOf(0L, 0L, System.currentTimeMillis() + 60000L)  // over limit

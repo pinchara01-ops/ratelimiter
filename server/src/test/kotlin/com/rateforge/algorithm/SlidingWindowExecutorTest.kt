@@ -27,7 +27,7 @@ class SlidingWindowExecutorTest {
     @Test
     fun `happy path - request allowed under limit`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 9L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
@@ -39,7 +39,7 @@ class SlidingWindowExecutorTest {
     @Test
     fun `over limit - request denied`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(0L, 0L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
@@ -55,7 +55,7 @@ class SlidingWindowExecutorTest {
 
         // Simulate: at t=0, request allowed (first request in window)
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returnsMany listOf(
             listOf(1L, 9L, now + windowMs),           // t=0: allowed
             listOf(0L, 0L, now + windowMs),            // t=window-1: denied (full)
@@ -78,7 +78,7 @@ class SlidingWindowExecutorTest {
     @Test
     fun `cost greater than 1 counts multiple events`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 5L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L, cost = 5L)
@@ -91,7 +91,7 @@ class SlidingWindowExecutorTest {
     fun `key uses hash tag for cluster slot pinning`() {
         val keysSlot = slot<List<String>>()
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(1L, 9L, System.currentTimeMillis() + 60000L)
 
         executor.checkLimit("myClient", "/api/endpoint", limit = 10L, windowMs = 60000L)
@@ -105,7 +105,7 @@ class SlidingWindowExecutorTest {
     @Test
     fun `remaining never goes below zero`() {
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
+            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any<List<String>>(), any<String>(), any<String>(), any<String>(), any<String>())
         } returns listOf(0L, 0L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 5L, windowMs = 60000L)
