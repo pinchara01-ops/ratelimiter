@@ -1,0 +1,38 @@
+# RAT-23: Fly.io deployment — RateForge server (gRPC port 9090)
+app = "rateforge-server"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  GRPC_PORT = "9090"
+  DB_PORT   = "5432"
+  REDIS_PORT = "6379"
+
+[[services]]
+  protocol    = "tcp"
+  internal_port = 9090
+
+  [[services.ports]]
+    port = 9090
+    handlers = ["tcp"]
+
+  [services.concurrency]
+    type       = "requests"
+    soft_limit = 1000
+    hard_limit = 1200
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout  = "5s"
+    grace_period = "30s"
+
+[deploy]
+  strategy = "rolling"
+
+[metrics]
+  port = 9091
+  path = "/metrics"

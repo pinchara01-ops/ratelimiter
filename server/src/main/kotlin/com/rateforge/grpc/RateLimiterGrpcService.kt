@@ -61,7 +61,7 @@ class RateLimiterGrpcService(
                 }
             }
             batchCheckResponse {
-                this.responses += results
+                this.addAllResponses(results)
             }
         } catch (e: Exception) {
             log.error("batchCheck failed", e)
@@ -239,6 +239,7 @@ class RateLimiterGrpcService(
                         refillRate = refillRate
                     )
                 }
+                else -> throw IllegalStateException("Unsupported algorithm type: ${policy.algorithm}")
             }
         } catch (e: Exception) {
             log.error("getLimitStatus Redis query failed for client={} endpoint={}", clientId, endpoint, e)
@@ -289,6 +290,7 @@ class RateLimiterGrpcService(
                     cost = cost
                 )
             }
+            else -> throw IllegalStateException("Unsupported algorithm type: ${policy.algorithm}")
         }
     }
 
