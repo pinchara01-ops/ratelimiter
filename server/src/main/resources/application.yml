@@ -57,6 +57,7 @@ rateforge:
     queue-capacity: 10000
     flush-interval-ms: 500
     flush-batch-size: 1000
+    retention-days: 90
 
 logging:
   level:
