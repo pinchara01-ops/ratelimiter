@@ -1,5 +1,6 @@
 package com.rateforge.analytics
 
+import com.rateforge.config.RateForgeMetrics
 import com.rateforge.config.RateForgeProperties
 import jakarta.annotation.PreDestroy
 import org.slf4j.LoggerFactory
@@ -14,7 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Component
 class AnalyticsPipeline(
     private val properties: RateForgeProperties,
-    private val jdbcTemplate: JdbcTemplate
+    private val jdbcTemplate: JdbcTemplate,
+    private val metrics: RateForgeMetrics
 ) {
     private val log = LoggerFactory.getLogger(AnalyticsPipeline::class.java)
 
@@ -31,7 +33,10 @@ class AnalyticsPipeline(
         if (!queue.offer(event)) {
             log.warn("Analytics queue full (capacity={}), dropping event for client={} endpoint={}",
                 properties.analytics.queueCapacity, event.clientId, event.endpoint)
+            metrics.incrementDroppedEvents()
         }
+        // Update queue depth metrics after recording
+        metrics.setAnalyticsQueueDepth(queue.size.toLong())
     }
 
     @Scheduled(fixedDelayString = "\${rateforge.analytics.flush-interval-ms:500}")
@@ -81,9 +86,13 @@ class AnalyticsPipeline(
             batch.forEach { event ->
                 if (!queue.offer(event)) {
                     log.warn("Could not re-queue failed analytics event, dropping: clientId={}", event.clientId)
+                    metrics.incrementDroppedEvents()
                 }
             }
         }
+        
+        // Update queue depth metrics after flush
+        metrics.setAnalyticsQueueDepth(queue.size.toLong())
     }
 
     private fun persistBatch(events: Collection<DecisionEvent>) {
