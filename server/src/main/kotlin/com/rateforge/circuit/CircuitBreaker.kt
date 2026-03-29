@@ -1,5 +1,7 @@
 package com.rateforge.circuit
 
+import com.rateforge.config.CircuitBreakerState as MetricsCircuitBreakerState
+import com.rateforge.config.RateForgeMetrics
 import com.rateforge.config.RateForgeProperties
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -21,7 +23,8 @@ data class CircuitBreakerState(
 
 @Component
 class CircuitBreaker(
-    private val properties: RateForgeProperties
+    private val properties: RateForgeProperties,
+    private val metrics: RateForgeMetrics
 ) {
     private val log = LoggerFactory.getLogger(CircuitBreaker::class.java)
 
@@ -39,7 +42,7 @@ class CircuitBreaker(
 
     fun getState(): CircuitState {
         val current = circuitState.get()
-        return when (current.state) {
+        val newState = when (current.state) {
             CircuitState.OPEN -> {
                 val now = System.currentTimeMillis()
                 if (now - current.openedAtMs >= properties.circuitBreaker.probeIntervalMs) {
@@ -47,6 +50,7 @@ class CircuitBreaker(
                     val halfOpen = CircuitBreakerState(CircuitState.HALF_OPEN, current.openedAtMs)
                     if (circuitState.compareAndSet(current, halfOpen)) {
                         log.info("Circuit breaker transitioning OPEN -> HALF_OPEN")
+                        metrics.setCircuitBreakerState(MetricsCircuitBreakerState.HALF_OPEN)
                         probeInFlight.set(false)
                         successCount.set(0)
                     }
@@ -57,6 +61,15 @@ class CircuitBreaker(
             }
             else -> current.state
         }
+        
+        // Update metrics with current state
+        when (newState) {
+            CircuitState.CLOSED -> metrics.setCircuitBreakerState(MetricsCircuitBreakerState.CLOSED)
+            CircuitState.OPEN -> metrics.setCircuitBreakerState(MetricsCircuitBreakerState.OPEN)
+            CircuitState.HALF_OPEN -> metrics.setCircuitBreakerState(MetricsCircuitBreakerState.HALF_OPEN)
+        }
+        
+        return newState
     }
 
     /**
@@ -71,6 +84,7 @@ class CircuitBreaker(
                 val closed = CircuitBreakerState(CircuitState.CLOSED)
                 if (circuitState.compareAndSet(current, closed)) {
                     log.info("Circuit breaker transitioning HALF_OPEN -> CLOSED (probe succeeded with $count successes)")
+                    metrics.setCircuitBreakerState(MetricsCircuitBreakerState.CLOSED)
                     probeInFlight.set(false)
                     successCount.set(0)
                     failureTimestamps.clear()
@@ -93,6 +107,7 @@ class CircuitBreaker(
             val open = CircuitBreakerState(CircuitState.OPEN, now)
             if (circuitState.compareAndSet(current, open)) {
                 log.warn("Circuit breaker transitioning HALF_OPEN -> OPEN (probe failed)")
+                metrics.setCircuitBreakerState(MetricsCircuitBreakerState.OPEN)
                 probeInFlight.set(false)
                 successCount.set(0)
             }
@@ -108,6 +123,7 @@ class CircuitBreaker(
                 if (circuitState.compareAndSet(current, open)) {
                     log.error("Circuit breaker transitioning CLOSED -> OPEN ({} failures in {}ms window)",
                         failureTimestamps.size, properties.circuitBreaker.windowMs)
+                    metrics.setCircuitBreakerState(MetricsCircuitBreakerState.OPEN)
                     successCount.set(0)
                 }
             }
@@ -146,6 +162,7 @@ class CircuitBreaker(
                     val halfOpen = CircuitBreakerState(CircuitState.HALF_OPEN, current.openedAtMs)
                     if (circuitState.compareAndSet(current, halfOpen) && probeInFlight.compareAndSet(false, true)) {
                         log.info("Circuit breaker transitioning OPEN -> HALF_OPEN (probe allowed)")
+                        metrics.setCircuitBreakerState(MetricsCircuitBreakerState.HALF_OPEN)
                         successCount.set(0)
                         // fall through to execute the probe below
                     } else {

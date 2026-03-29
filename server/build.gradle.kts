@@ -21,6 +21,10 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+    // Metrics
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -58,6 +62,9 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("com.redis:testcontainers-redis:2.2.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    
+    // gRPC testing
+    testImplementation("io.grpc:grpc-testing:$grpcVersion")
 }
 
 tasks.withType<KotlinCompile> {

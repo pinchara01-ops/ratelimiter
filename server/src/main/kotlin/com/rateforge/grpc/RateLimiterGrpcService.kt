@@ -10,6 +10,7 @@ import com.rateforge.analytics.DecisionEvent
 import com.rateforge.analytics.DecisionReason
 import com.rateforge.circuit.CircuitBreaker
 import com.rateforge.circuit.CircuitState
+import com.rateforge.config.RateForgeMetrics
 import com.rateforge.config.RateForgeProperties
 import com.rateforge.hotkey.LocalPreCounter
 import com.rateforge.policy.NoMatchBehavior
@@ -43,7 +44,8 @@ class RateLimiterGrpcService(
     private val tokenBucketExecutor: TokenBucketExecutor,
     private val analyticsPipeline: AnalyticsPipeline,
     private val properties: RateForgeProperties,
-    private val localPreCounter: LocalPreCounter
+    private val localPreCounter: LocalPreCounter,
+    private val metrics: RateForgeMetrics
 ) : RateLimiterServiceGrpcKt.RateLimiterServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(RateLimiterGrpcService::class.java)
@@ -97,6 +99,10 @@ class RateLimiterGrpcService(
             val allowed = behavior == RateForgeProperties.NoMatchBehaviorConfig.FAIL_OPEN
             val reason = DecisionReason.CIRCUIT_OPEN
 
+            // Record decision metrics
+            val timerSample = metrics.recordDecision("", "circuit_open")
+            metrics.recordDecisionLatency(timerSample)
+
             recordEvent(clientId, endpoint, method, null, allowed, reason, latencyUs)
 
             return checkLimitResponse {
@@ -118,6 +124,11 @@ class RateLimiterGrpcService(
             val allowed = defaultBehavior == RateForgeProperties.NoMatchBehaviorConfig.FAIL_OPEN
             val reason = if (allowed) DecisionReason.NO_POLICY_FAIL_OPEN else DecisionReason.NO_POLICY_FAIL_CLOSED
 
+            // Record decision metrics  
+            val decision = if (allowed) "no_policy_fail_open" else "no_policy_fail_closed"
+            val timerSample = metrics.recordDecision("", decision)
+            metrics.recordDecisionLatency(timerSample)
+
             recordEvent(clientId, endpoint, method, null, allowed, reason, latencyUs)
 
             return checkLimitResponse {
@@ -134,6 +145,12 @@ class RateLimiterGrpcService(
         localPreCounter.recordRequest(hotKey)
         if (localPreCounter.isHotKey(hotKey) && localPreCounter.tryConsumeLocal(hotKey)) {
             val latencyUs = (System.nanoTime() - startNs) / 1000
+            
+            // Record hot-key pre-denial metrics
+            metrics.incrementHotkeyPreDenied()
+            val timerSample = metrics.recordDecision(policy.algorithm.name, "allowed")
+            metrics.recordDecisionLatency(timerSample)
+            
             recordEvent(clientId, endpoint, method, policy, true, DecisionReason.ALLOWED, latencyUs)
             return checkLimitResponse {
                 allowed = true
@@ -172,6 +189,16 @@ class RateLimiterGrpcService(
             result.allowed -> DecisionReason.ALLOWED
             else -> DecisionReason.RATE_LIMITED
         }
+
+        // Record decision metrics
+        val decision = when (reason) {
+            DecisionReason.CIRCUIT_OPEN -> "circuit_open"
+            DecisionReason.ALLOWED -> "allowed"
+            DecisionReason.RATE_LIMITED -> "rate_limited"
+            else -> "other"
+        }
+        val timerSample = metrics.recordDecision(policy.algorithm.name, decision)
+        metrics.recordDecisionLatency(timerSample)
 
         // If the key was served by Redis successfully and it's hot, grant a local budget batch
         if (!isCircuitOpen && localPreCounter.isHotKey(hotKey)) {
