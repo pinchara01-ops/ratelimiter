@@ -22,8 +22,6 @@ spring:
 grpc:
   server:
     port: ${GRPC_PORT:9090}
-    security:
-      enabled: false
 
 management:
   server:
@@ -58,6 +56,10 @@ rateforge:
     flush-interval-ms: 500
     flush-batch-size: 1000
     retention-days: 90
+  auth:
+    enabled: ${AUTH_ENABLED:false}
+    api-keys: ${AUTH_API_KEYS:}
+    api-key-header: x-api-key
 
 logging:
   level:
