@@ -65,7 +65,8 @@ class ConfigGrpcServiceTest {
     
     @AfterEach
     fun teardown() {
-        grpcCleanup.tearDown()
+        // GrpcCleanupRule handles cleanup automatically via JUnit rules
+        // No manual cleanup needed
     }
     
     @Test
@@ -372,7 +373,7 @@ class ConfigGrpcServiceTest {
         val policy3 = createTestPolicyEntity(name = "policy3", enabled = false)
         
         val enabledPolicies = listOf(policy1, policy2)
-        val page = PageImpl(enabledPolicies, PageRequest.of(0, 50), 2L)
+        val policyPage = PageImpl(enabledPolicies, PageRequest.of(0, 50), 2L)
         
         val request = listPoliciesRequest {
             enabledOnly = true
@@ -380,7 +381,7 @@ class ConfigGrpcServiceTest {
             pageSize = 50
         }
         
-        every { policyRepository.findAllEnabledOrderByPriority(any()) } returns page
+        every { policyRepository.findAllEnabledOrderByPriority(any()) } returns policyPage
         
         // When
         val response = client.listPolicies(request)
@@ -405,7 +406,7 @@ class ConfigGrpcServiceTest {
         val policy2 = createTestPolicyEntity(name = "policy2", enabled = false)
         
         val allPolicies = listOf(policy1, policy2)
-        val page = PageImpl(allPolicies, PageRequest.of(0, 10), 2L)
+        val policyPage = PageImpl(allPolicies, PageRequest.of(0, 10), 2L)
         
         val request = listPoliciesRequest {
             enabledOnly = false
@@ -413,7 +414,7 @@ class ConfigGrpcServiceTest {
             pageSize = 10
         }
         
-        every { policyRepository.findAll(any<PageRequest>()) } returns page
+        every { policyRepository.findAll(any<PageRequest>()) } returns policyPage
         
         // When
         val response = client.listPolicies(request)
