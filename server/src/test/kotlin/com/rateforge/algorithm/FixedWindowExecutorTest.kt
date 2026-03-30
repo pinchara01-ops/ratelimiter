@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.data.redis.core.RedisTemplate
 import org.springframework.data.redis.core.script.DefaultRedisScript
+import org.springframework.data.redis.core.script.RedisScript
 
 class FixedWindowExecutorTest {
 
@@ -15,20 +16,51 @@ class FixedWindowExecutorTest {
     private lateinit var luaScriptLoader: LuaScriptLoader
     private lateinit var executor: FixedWindowExecutor
 
+    private var executeResults: MutableList<List<Long>> = mutableListOf()
+    private var executeCallCount = 0
+
     @BeforeEach
     fun setUp() {
         redisTemplate = mockk()
         luaScriptLoader = mockk()
         val script = mockk<DefaultRedisScript<List<*>>>()
         every { luaScriptLoader.fixedWindowScript } returns script
+        
+        executeResults = mutableListOf()
+        executeCallCount = 0
+        
         executor = FixedWindowExecutor(redisTemplate, luaScriptLoader)
+    }
+    
+    private fun mockExecuteReturns(result: List<Long>) {
+        every { 
+            redisTemplate.execute(any<RedisScript<List<*>>>(), any<List<String>>(), *anyVararg())
+        } returns result
+    }
+    
+    private fun mockExecuteReturnsMany(results: List<List<Long>>) {
+        executeResults = results.toMutableList()
+        executeCallCount = 0
+        every { 
+            redisTemplate.execute(any<RedisScript<List<*>>>(), any<List<String>>(), *anyVararg())
+        } answers {
+            val result = executeResults.getOrElse(executeCallCount) { executeResults.last() }
+            executeCallCount++
+            result
+        }
+    }
+    
+    private fun mockExecuteWithKeyMatch(keyPattern: String, result: List<Long>) {
+        every { 
+            redisTemplate.execute(any<RedisScript<List<*>>>(), match<List<String>> { it[0].contains(keyPattern) }, *anyVararg())
+        } returns result
     }
 
     @Test
     fun `happy path - request allowed when under limit`() {
         val keysSlot = slot<List<String>>()
         every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), capture(keysSlot), any(), any(), any(), any())
+            redisTemplate.execute(any<RedisScript<List<*>>>(), capture(keysSlot), *anyVararg())
         } returns listOf(1L, 9L, System.currentTimeMillis() + 60000L)
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
@@ -40,9 +72,7 @@ class FixedWindowExecutorTest {
 
     @Test
     fun `over limit - request denied`() {
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
-        } returns listOf(0L, 0L, System.currentTimeMillis() + 30000L)
+        mockExecuteReturns(listOf(0L, 0L, System.currentTimeMillis() + 30000L))
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
 
@@ -53,9 +83,7 @@ class FixedWindowExecutorTest {
 
     @Test
     fun `cost greater than 1 - remaining decreases by cost`() {
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
-        } returns listOf(1L, 5L, System.currentTimeMillis() + 60000L)
+        mockExecuteReturns(listOf(1L, 5L, System.currentTimeMillis() + 60000L))
 
         val result = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L, cost = 5L)
 
@@ -65,13 +93,10 @@ class FixedWindowExecutorTest {
 
     @Test
     fun `window expiry - new window starts fresh`() {
-        // First call - window full
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
-        } returnsMany listOf(
+        mockExecuteReturnsMany(listOf(
             listOf(0L, 0L, System.currentTimeMillis() + 1000L),
             listOf(1L, 9L, System.currentTimeMillis() + 60000L)
-        )
+        ))
 
         val result1 = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
         assertThat(result1.allowed).isFalse()
@@ -84,12 +109,10 @@ class FixedWindowExecutorTest {
 
     @Test
     fun `exact limit - last request allowed, next denied`() {
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), any(), any(), any(), any(), any())
-        } returnsMany listOf(
+        mockExecuteReturnsMany(listOf(
             listOf(1L, 0L, System.currentTimeMillis() + 60000L), // exactly at limit
             listOf(0L, 0L, System.currentTimeMillis() + 60000L)  // over limit
-        )
+        ))
 
         val result1 = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
         assertThat(result1.allowed).isTrue()
@@ -101,13 +124,8 @@ class FixedWindowExecutorTest {
 
     @Test
     fun `different clients have independent windows`() {
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), match { it[0].contains("client1") }, any(), any(), any(), any())
-        } returns listOf(0L, 0L, System.currentTimeMillis() + 60000L)
-
-        every {
-            redisTemplate.execute(any<DefaultRedisScript<List<*>>>(), match { it[0].contains("client2") }, any(), any(), any(), any())
-        } returns listOf(1L, 9L, System.currentTimeMillis() + 60000L)
+        mockExecuteWithKeyMatch("client1", listOf(0L, 0L, System.currentTimeMillis() + 60000L))
+        mockExecuteWithKeyMatch("client2", listOf(1L, 9L, System.currentTimeMillis() + 60000L))
 
         val result1 = executor.checkLimit("client1", "/api/test", limit = 10L, windowMs = 60000L)
         val result2 = executor.checkLimit("client2", "/api/test", limit = 10L, windowMs = 60000L)

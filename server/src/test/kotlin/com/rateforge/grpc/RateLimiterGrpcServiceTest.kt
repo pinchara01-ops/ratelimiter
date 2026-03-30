@@ -119,7 +119,8 @@ class RateLimiterGrpcServiceTest {
     
     @AfterEach
     fun teardown() {
-        grpcCleanup.tearDown()
+        // GrpcCleanupRule handles cleanup automatically via JUnit rules
+        // No manual cleanup needed
     }
     
     @Test
@@ -278,21 +279,21 @@ class RateLimiterGrpcServiceTest {
         val policy2 = createTestPolicy(id = UUID.randomUUID(), name = "policy2")
         
         val request = batchCheckRequest {
-            addRequests(checkLimitRequest {
+            requests += checkLimitRequest {
                 clientId = "client1"
                 endpoint = "/api/test1"
                 method = "GET"
-            })
-            addRequests(checkLimitRequest {
+            }
+            requests += checkLimitRequest {
                 clientId = "client2"  
                 endpoint = "/api/test2"
                 method = "POST"
-            })
-            addRequests(checkLimitRequest {
+            }
+            requests += checkLimitRequest {
                 clientId = "client3"
                 endpoint = "/api/unknown"
                 method = "GET"
-            })
+            }
         }
         
         every { circuitBreaker.getState() } returns CircuitState.CLOSED
@@ -405,7 +406,7 @@ class RateLimiterGrpcServiceTest {
         assertEquals(policy.id, capturedEvent.policyId)
         assertTrue(capturedEvent.allowed)
         assertEquals(DecisionReason.ALLOWED, capturedEvent.reason)
-        assertTrue(capturedEvent.latencyUs > 0)
+        assertTrue((capturedEvent.latencyUs ?: 0) > 0)
     }
     
     @Test
@@ -499,11 +500,11 @@ class RateLimiterGrpcServiceTest {
             async {
                 val request = batchCheckRequest {
                     (1..itemsPerBatch).forEach { itemNum ->
-                        addRequests(checkLimitRequest {
+                        requests += checkLimitRequest {
                             clientId = "client-$batchNum-$itemNum"
                             endpoint = "/api/test"
                             method = "GET"
-                        })
+                        }
                     }
                 }
                 client.batchCheck(request)
