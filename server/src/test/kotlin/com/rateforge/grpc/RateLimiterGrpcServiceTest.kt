@@ -27,6 +27,8 @@ import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.testing.GrpcCleanupRule
 import io.micrometer.core.instrument.Timer
 import io.mockk.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
@@ -471,6 +473,103 @@ class RateLimiterGrpcServiceTest {
         
         assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
         assertTrue(exception.message!!.contains("endpoint must not be blank"))
+    }
+    
+    @Test
+    fun `batchCheck should handle concurrent load without blocking threads`() = runBlocking {
+        // Given - setup for concurrent batch requests
+        val policy = createTestPolicy()
+        val concurrentBatches = 20
+        val itemsPerBatch = 50
+        
+        every { circuitBreaker.getState() } returns CircuitState.CLOSED
+        every { policyCache.getPolicies() } returns listOf(policy)
+        every { policyMatcher.findMatchingPolicy(any(), any(), any(), any()) } returns policy
+        every { localPreCounter.isHotKey(any()) } returns false
+        every { circuitBreaker.execute<RateLimitResult>(any(), any()) } answers {
+            val operation = firstArg<() -> RateLimitResult>()
+            operation()
+        }
+        every { fixedWindowExecutor.checkLimit(any(), any(), any(), any(), any(), any()) } returns 
+            RateLimitResult(allowed = true, remaining = 5, resetAtMs = System.currentTimeMillis() + 60000)
+        
+        // When - fire many concurrent batch requests
+        val startTime = System.currentTimeMillis()
+        val responses = (1..concurrentBatches).map { batchNum ->
+            async {
+                val request = batchCheckRequest {
+                    (1..itemsPerBatch).forEach { itemNum ->
+                        addRequests(checkLimitRequest {
+                            clientId = "client-$batchNum-$itemNum"
+                            endpoint = "/api/test"
+                            method = "GET"
+                        })
+                    }
+                }
+                client.batchCheck(request)
+            }
+        }.awaitAll()
+        val elapsed = System.currentTimeMillis() - startTime
+        
+        // Then - all batches should complete successfully
+        assertEquals(concurrentBatches, responses.size)
+        responses.forEach { response ->
+            assertEquals(itemsPerBatch, response.responsesCount)
+            response.responsesList.forEach { checkResponse ->
+                assertTrue(checkResponse.allowed)
+                assertEquals(DecisionReason.ALLOWED, checkResponse.reason)
+            }
+        }
+        
+        // Verify total items processed
+        val totalItems = concurrentBatches * itemsPerBatch
+        verify(exactly = totalItems) { analyticsPipeline.record(any()) }
+        
+        // Log timing for manual verification (should complete reasonably fast without thread blocking)
+        println("Processed $totalItems items across $concurrentBatches concurrent batches in ${elapsed}ms")
+    }
+    
+    @Test
+    fun `checkLimit single request latency should not regress under concurrent load`() = runBlocking {
+        // Given
+        val policy = createTestPolicy()
+        val concurrentCalls = 100
+        
+        every { circuitBreaker.getState() } returns CircuitState.CLOSED
+        every { policyCache.getPolicies() } returns listOf(policy)
+        every { policyMatcher.findMatchingPolicy(any(), any(), any(), any()) } returns policy
+        every { localPreCounter.isHotKey(any()) } returns false
+        every { circuitBreaker.execute<RateLimitResult>(any(), any()) } answers {
+            val operation = firstArg<() -> RateLimitResult>()
+            operation()
+        }
+        every { fixedWindowExecutor.checkLimit(any(), any(), any(), any(), any(), any()) } returns 
+            RateLimitResult(allowed = true, remaining = 5, resetAtMs = System.currentTimeMillis() + 60000)
+        
+        // When - fire many concurrent single checkLimit requests
+        val latencies = (1..concurrentCalls).map { i ->
+            async {
+                val request = checkLimitRequest {
+                    clientId = "client-$i"
+                    endpoint = "/api/test"
+                    method = "GET"
+                }
+                val start = System.nanoTime()
+                client.checkLimit(request)
+                (System.nanoTime() - start) / 1_000_000.0 // Convert to ms
+            }
+        }.awaitAll()
+        
+        // Then - verify latency distribution
+        val avgLatency = latencies.average()
+        val p99Latency = latencies.sorted()[(concurrentCalls * 0.99).toInt() - 1]
+        
+        println("Single-check latency under concurrent load: avg=${avgLatency}ms, p99=${p99Latency}ms")
+        
+        // P99 should be reasonable (not blocked by runBlocking anymore)
+        assertTrue(p99Latency < 500, "P99 latency should be under 500ms, was ${p99Latency}ms")
+        
+        verify(exactly = concurrentCalls) { analyticsPipeline.record(any()) }
     }
     
     private fun createTestPolicy(
