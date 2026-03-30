@@ -31,5 +31,3 @@ COMMENT ON INDEX idx_de_client_occurred IS 'Optimizes getTopClients query: GROUP
 COMMENT ON INDEX idx_de_policy_occurred IS 'Optimizes getAggregatedStats query: filter by policy_id and time';
 COMMENT ON INDEX idx_de_allowed_occurred IS 'Optimizes deny rate queries: filter by allowed status and time';
 COMMENT ON INDEX idx_de_client_allowed_occurred IS 'Optimizes getRecentEvents: multiple filters with time ordering';
-COMMENT ON CONSTRAINT fk_de_policy IS 'Prevents orphaned decision_events when policies are deleted';
-COMMENT ON CONSTRAINT uq_policy_scope IS 'Ensures unique policy per (client_id, endpoint, method)';

@@ -95,17 +95,17 @@ class RateForgeMetrics(private val meterRegistry: MeterRegistry) {
 
     init {
         // Register gauge metrics that track atomic values
-        Gauge.builder("rateforge.circuit_breaker.state")
+        Gauge.builder("rateforge.circuit_breaker.state") { circuitBreakerState.get().toDouble() }
             .description("Circuit breaker state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)")
-            .register(meterRegistry) { circuitBreakerState.get().toDouble() }
+            .register(meterRegistry)
 
-        Gauge.builder("rateforge.analytics.queue.depth")
+        Gauge.builder("rateforge.analytics.queue.depth") { analyticsQueueDepth.get().toDouble() }
             .description("Current analytics queue size")
-            .register(meterRegistry) { analyticsQueueDepth.get().toDouble() }
+            .register(meterRegistry)
 
-        Gauge.builder("rateforge.policy_cache.size")
+        Gauge.builder("rateforge.policy_cache.size") { policyCacheSize.get().toDouble() }
             .description("Number of cached policies")
-            .register(meterRegistry) { policyCacheSize.get().toDouble() }
+            .register(meterRegistry)
     }
 }
 

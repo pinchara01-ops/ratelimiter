@@ -10,7 +10,7 @@ export const options = {
   duration: "5m",
   thresholds: {
     grpc_req_duration: ["p(50)<2", "p(95)<5", "p(99)<10"],
-    grpc_req_failed:   ["rate<0.001"],
+    checks: ["rate>0.999"],
   },
 };
 
