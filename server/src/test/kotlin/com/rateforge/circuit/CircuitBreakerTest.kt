@@ -1,6 +1,11 @@
 package com.rateforge.circuit
 
+import com.rateforge.config.RateForgeMetrics
 import com.rateforge.config.RateForgeProperties
+import io.mockk.every
+import io.mockk.just
+import io.mockk.mockk
+import io.mockk.Runs
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.BeforeEach
@@ -11,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference
 class CircuitBreakerTest {
 
     private lateinit var circuitBreaker: CircuitBreaker
+    private val metrics = mockk<RateForgeMetrics>()
     private val properties = RateForgeProperties(
         circuitBreaker = RateForgeProperties.CircuitBreakerProperties(
             failureThreshold = 5,
@@ -22,7 +28,8 @@ class CircuitBreakerTest {
 
     @BeforeEach
     fun setUp() {
-        circuitBreaker = CircuitBreaker(properties)
+        every { metrics.setCircuitBreakerState(any()) } just Runs
+        circuitBreaker = CircuitBreaker(properties, metrics)
     }
 
     @Test
