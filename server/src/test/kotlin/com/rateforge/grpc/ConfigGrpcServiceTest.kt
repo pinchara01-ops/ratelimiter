@@ -4,7 +4,7 @@ import com.rateforge.algorithm.AlgorithmType
 import com.rateforge.policy.*
 import com.rateforge.proto.*
 import io.grpc.Status
-import io.grpc.StatusRuntimeException
+import io.grpc.StatusException
 import io.grpc.inprocess.InProcessChannelBuilder
 import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.testing.GrpcCleanupRule
@@ -84,7 +84,13 @@ class ConfigGrpcServiceTest {
             enabled = true
         }
         
-        val savedEntity = createTestPolicyEntity(name = "test-policy")
+        val savedEntity = createTestPolicyEntity(
+            name = "test-policy",
+            clientId = "test-client",
+            endpoint = "/api/test",
+            method = "GET",
+            priority = 50
+        )
         
         every { policyRepository.existsByName("test-policy") } returns false
         every { policyRepository.save(any()) } returns savedEntity
@@ -121,11 +127,11 @@ class ConfigGrpcServiceTest {
         every { policyRepository.existsByName("duplicate-policy") } returns true
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.createPolicy(request)
         }
         
-        assertEquals(Status.ALREADY_EXISTS.code, exception.status.code)
+        assertEquals(Status.ALREADY_EXISTS.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Policy with name 'duplicate-policy' already exists"))
         
         verify(exactly = 0) { policyRepository.save(any()) }
@@ -142,15 +148,18 @@ class ConfigGrpcServiceTest {
             windowMs = 60000
         }
         
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.createPolicy(blankNameRequest)
         }
-        assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Policy name is required"))
     }
     
     @Test
     fun `createPolicy should validate TOKEN_BUCKET requirements`() = runBlocking {
+        // Mock existsByName for both requests
+        every { policyRepository.existsByName("token-bucket-policy") } returns false
+        
         // Test missing bucketSize
         val request1 = createPolicyRequest {
             name = "token-bucket-policy"
@@ -161,10 +170,10 @@ class ConfigGrpcServiceTest {
             refillRate = 1.0
         }
         
-        val exception1 = assertThrows<StatusRuntimeException> {
+        val exception1 = assertThrows<StatusException> {
             client.createPolicy(request1)
         }
-        assertEquals(Status.INVALID_ARGUMENT.code, exception1.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception1).code)
         assertTrue(exception1.message!!.contains("Token bucket requires bucketSize > 0"))
         
         // Test missing refillRate
@@ -177,10 +186,10 @@ class ConfigGrpcServiceTest {
             refillRate = 0.0 // Invalid
         }
         
-        val exception2 = assertThrows<StatusRuntimeException> {
+        val exception2 = assertThrows<StatusException> {
             client.createPolicy(request2)
         }
-        assertEquals(Status.INVALID_ARGUMENT.code, exception2.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception2).code)
         assertTrue(exception2.message!!.contains("Token bucket requires refillRate > 0"))
     }
     
@@ -277,11 +286,11 @@ class ConfigGrpcServiceTest {
         every { policyRepository.findByIdOrNull(any<UUID>()) } returns null
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.updatePolicy(request)
         }
         
-        assertEquals(Status.NOT_FOUND.code, exception.status.code)
+        assertEquals(Status.NOT_FOUND.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Policy not found"))
         
         verify(exactly = 0) { policyRepository.save(any()) }
@@ -297,11 +306,11 @@ class ConfigGrpcServiceTest {
         }
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.updatePolicy(request)
         }
         
-        assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Invalid policy ID format"))
     }
     
@@ -338,11 +347,11 @@ class ConfigGrpcServiceTest {
         every { policyRepository.existsById(policyId) } returns false
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.deletePolicy(request)
         }
         
-        assertEquals(Status.NOT_FOUND.code, exception.status.code)
+        assertEquals(Status.NOT_FOUND.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Policy not found"))
         
         verify(exactly = 0) { policyRepository.deleteById(any()) }
@@ -357,11 +366,11 @@ class ConfigGrpcServiceTest {
         }
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.deletePolicy(request)
         }
         
-        assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("Invalid policy ID format"))
     }
     
@@ -459,21 +468,30 @@ class ConfigGrpcServiceTest {
     private fun createTestPolicyEntity(
         id: UUID = UUID.randomUUID(),
         name: String = "test-policy",
+        clientId: String = "*",
+        endpoint: String = "*",
+        method: String = "*",
+        algorithm: AlgorithmType = AlgorithmType.FIXED_WINDOW,
+        limit: Long = 100L,
+        windowMs: Long = 60000L,
+        bucketSize: Long? = null,
+        refillRate: Double? = null,
+        priority: Int = 100,
         enabled: Boolean = true
     ): PolicyEntity {
         return PolicyEntity(
             id = id,
             name = name,
-            clientId = "*",
-            endpoint = "*",
-            method = "*",
-            algorithm = AlgorithmType.FIXED_WINDOW,
-            limit = 100L,
-            windowMs = 60000L,
-            bucketSize = null,
-            refillRate = null,
+            clientId = clientId,
+            endpoint = endpoint,
+            method = method,
+            algorithm = algorithm,
+            limit = limit,
+            windowMs = windowMs,
+            bucketSize = bucketSize,
+            refillRate = refillRate,
             cost = 1L,
-            priority = 100,
+            priority = priority,
             noMatchBehavior = null,
             enabled = enabled,
             createdAt = Instant.now(),
