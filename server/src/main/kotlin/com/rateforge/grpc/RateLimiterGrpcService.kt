@@ -29,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import net.devh.boot.grpc.server.service.GrpcService
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -55,12 +54,10 @@ class RateLimiterGrpcService(
 
     override suspend fun batchCheck(request: BatchCheckRequest): BatchCheckResponse {
         return try {
-            val results = runBlocking {
-                coroutineScope {
-                    request.requestsList.map { req ->
-                        async(Dispatchers.IO) { processSingleCheck(req) }
-                    }.awaitAll()
-                }
+            val results = coroutineScope {
+                request.requestsList.map { req ->
+                    async(Dispatchers.IO) { processSingleCheck(req) }
+                }.awaitAll()
             }
             batchCheckResponse {
                 this.addAllResponses(results)
