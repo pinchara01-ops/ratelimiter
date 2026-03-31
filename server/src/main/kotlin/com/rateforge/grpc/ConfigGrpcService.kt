@@ -20,7 +20,6 @@ import com.rateforge.proto.NoMatchBehaviorProto
 import com.rateforge.proto.PolicyProto
 import com.rateforge.proto.PolicyResponse
 import com.rateforge.proto.UpdatePolicyRequest
-import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import net.devh.boot.grpc.server.service.GrpcService
 import org.slf4j.LoggerFactory
@@ -39,21 +38,21 @@ class ConfigGrpcService(
         log.info("createPolicy called: name={} algorithm={}", request.name, request.algorithm)
         try {
             if (request.name.isBlank()) {
-                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Policy name is required"))
+                throw ErrorSanitizer.validationError("Policy name is required")
             }
             if (policyRepository.existsByName(request.name)) {
-                throw StatusRuntimeException(Status.ALREADY_EXISTS.withDescription("Policy with name '${request.name}' already exists"))
+                throw ErrorSanitizer.alreadyExistsError("Policy", request.name)
             }
 
             val algorithm = request.algorithm.toDomain()
-                ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
+                ?: throw ErrorSanitizer.validationError("Invalid algorithm type")
 
             if (algorithm == AlgorithmType.TOKEN_BUCKET) {
                 if (request.bucketSize <= 0) {
-                    throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires bucketSize > 0"))
+                    throw ErrorSanitizer.validationError("Token bucket requires bucketSize > 0")
                 }
                 if (request.refillRate <= 0.0) {
-                    throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires refillRate > 0"))
+                    throw ErrorSanitizer.validationError("Token bucket requires refillRate > 0")
                 }
             }
 
@@ -81,18 +80,17 @@ class ConfigGrpcService(
         } catch (ex: StatusRuntimeException) {
             throw ex
         } catch (ex: Exception) {
-            log.error("createPolicy FAILED: {}", ex.message, ex)
-            throw Status.INTERNAL.withDescription("createPolicy failed: ${ex.javaClass.simpleName}: ${ex.message}").asRuntimeException()
+            throw ErrorSanitizer.internalError(ex, "createPolicy")
         }
     }
 
     override suspend fun updatePolicy(request: UpdatePolicyRequest): PolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         val entity = policyRepository.findByIdOrNull(id)
-            ?: throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            ?: throw ErrorSanitizer.notFoundError("Policy")
 
         if (request.name.isNotBlank()) entity.name = request.name
         if (request.clientId.isNotBlank()) entity.clientId = request.clientId
@@ -100,7 +98,7 @@ class ConfigGrpcService(
         if (request.method.isNotBlank()) entity.method = request.method
         if (request.algorithm != AlgorithmTypeProto.ALGORITHM_TYPE_UNSPECIFIED) {
             entity.algorithm = request.algorithm.toDomain()
-                ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
+                ?: throw ErrorSanitizer.validationError("Invalid algorithm type")
         }
         if (request.limit > 0) entity.limit = request.limit
         if (request.windowMs > 0) entity.windowMs = request.windowMs
@@ -126,11 +124,11 @@ class ConfigGrpcService(
 
     override suspend fun deletePolicy(request: DeletePolicyRequest): DeletePolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         if (!policyRepository.existsById(id)) {
-            throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            throw ErrorSanitizer.notFoundError("Policy")
         }
 
         policyRepository.deleteById(id)
@@ -145,11 +143,11 @@ class ConfigGrpcService(
 
     override suspend fun getPolicy(request: GetPolicyRequest): PolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         val entity = policyRepository.findByIdOrNull(id)
-            ?: throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            ?: throw ErrorSanitizer.notFoundError("Policy")
 
         return policyResponse { policy = entity.toDomain().toProto() }
     }
