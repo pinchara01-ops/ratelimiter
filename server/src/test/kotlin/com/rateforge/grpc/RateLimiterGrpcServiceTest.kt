@@ -21,7 +21,7 @@ import com.rateforge.proto.batchCheckRequest
 import com.rateforge.proto.checkLimitRequest
 import com.rateforge.proto.getLimitStatusRequest
 import io.grpc.Status
-import io.grpc.StatusRuntimeException
+import io.grpc.StatusException
 import io.grpc.inprocess.InProcessChannelBuilder
 import io.grpc.inprocess.InProcessServerBuilder
 import io.grpc.testing.GrpcCleanupRule
@@ -450,11 +450,11 @@ class RateLimiterGrpcServiceTest {
         }
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.checkLimit(request)
         }
         
-        assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("client_id must not be blank"))
     }
     
@@ -468,11 +468,11 @@ class RateLimiterGrpcServiceTest {
         }
         
         // When & Then
-        val exception = assertThrows<StatusRuntimeException> {
+        val exception = assertThrows<StatusException> {
             client.checkLimit(request)
         }
         
-        assertEquals(Status.INVALID_ARGUMENT.code, exception.status.code)
+        assertEquals(Status.INVALID_ARGUMENT.code, Status.fromThrowable(exception).code)
         assertTrue(exception.message!!.contains("endpoint must not be blank"))
     }
     
