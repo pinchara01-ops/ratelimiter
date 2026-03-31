@@ -48,16 +48,12 @@ services:
       - key: REDIS_PORT
         value: "6379"
 
-  # Redis (using Render private service)
+  # Redis (using Render private service - ephemeral, no disk on free tier)
   - type: pserv
     name: rateforge-redis
     runtime: docker
     plan: free
-    dockerCommand: redis-server --appendonly yes
-    disk:
-      name: redis-data
-      mountPath: /data
-      sizeGB: 1
+    dockerCommand: redis-server
 
   # Analytics Service
   - type: web
