@@ -13,7 +13,8 @@ data class RateForgeProperties(
 
     val circuitBreaker: CircuitBreakerProperties = CircuitBreakerProperties(),
     val analytics: AnalyticsProperties = AnalyticsProperties(),
-    val timeouts: TimeoutProperties = TimeoutProperties()
+    val timeouts: TimeoutProperties = TimeoutProperties(),
+    val policyCache: PolicyCacheProperties = PolicyCacheProperties()
 ) {
     enum class NoMatchBehaviorConfig {
         FAIL_OPEN, FAIL_CLOSED
@@ -41,5 +42,29 @@ data class RateForgeProperties(
         val databaseQueryMs: Long = 5000L,
         /** gRPC request deadline in milliseconds (0 = no deadline) */
         val grpcRequestMs: Long = 10000L
+    )
+
+    /**
+     * Policy cache configuration including circuit breaker settings.
+     */
+    data class PolicyCacheProperties(
+        /** Refresh interval for policy cache in milliseconds */
+        val refreshIntervalMs: Long = 30000L,
+        /** Circuit breaker configuration for database operations */
+        val circuitBreaker: PolicyCacheCircuitBreakerProperties = PolicyCacheCircuitBreakerProperties()
+    )
+
+    /**
+     * Circuit breaker configuration for policy cache database operations.
+     */
+    data class PolicyCacheCircuitBreakerProperties(
+        /** Number of failures within window to trip the circuit */
+        val failureThreshold: Int = 3,
+        /** Time window in milliseconds for counting failures */
+        val windowMs: Long = 60000L,
+        /** Time in milliseconds to wait before probing after circuit opens */
+        val probeIntervalMs: Long = 30000L,
+        /** Number of consecutive successes required to close the circuit */
+        val successThreshold: Int = 2
     )
 }
