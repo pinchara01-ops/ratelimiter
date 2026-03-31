@@ -1,5 +1,11 @@
 # Render.com Blueprint for RateForge
 # Deploy: https://render.com/deploy?repo=https://github.com/pinchara01-ops/ratelimiter
+#
+# IMPORTANT: After deploying, add REDIS_HOST manually in Render dashboard:
+# 1. Sign up at https://upstash.com (free Redis)
+# 2. Create a Redis database  
+# 3. Copy the host (e.g., cute-moose-12345.upstash.io)
+# 4. Add REDIS_HOST and REDIS_PASSWORD to rateforge-server environment variables
 
 databases:
   - name: rateforge-db
@@ -40,20 +46,11 @@ services:
         fromDatabase:
           name: rateforge-db
           property: password
-      - key: REDIS_HOST
-        fromService:
-          name: rateforge-redis
-          type: pserv
-          property: host
       - key: REDIS_PORT
         value: "6379"
-
-  # Redis (using Render private service - ephemeral, no disk on free tier)
-  - type: pserv
-    name: rateforge-redis
-    runtime: docker
-    plan: free
-    dockerCommand: redis-server
+      # Add these manually after getting Upstash Redis:
+      # - REDIS_HOST: your-redis.upstash.io
+      # - REDIS_PASSWORD: your-upstash-password
 
   # Analytics Service
   - type: web
