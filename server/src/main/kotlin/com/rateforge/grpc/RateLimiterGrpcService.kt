@@ -63,24 +63,17 @@ class RateLimiterGrpcService(
                 this.addAllResponses(results)
             }
         } catch (e: Exception) {
-            log.error("batchCheck failed", e)
-            throw io.grpc.StatusRuntimeException(
-                Status.INTERNAL.withDescription("batch check failed")
-            )
+            throw ErrorSanitizer.internalError(e, "batchCheck")
         }
     }
 
     private suspend fun processSingleCheck(request: CheckLimitRequest): CheckLimitResponse {
         // MAJ-7: Validate inputs
         if (request.clientId.isBlank()) {
-            throw io.grpc.StatusRuntimeException(
-                Status.INVALID_ARGUMENT.withDescription("client_id must not be blank")
-            )
+            throw ErrorSanitizer.validationError("client_id must not be blank")
         }
         if (request.endpoint.isBlank()) {
-            throw io.grpc.StatusRuntimeException(
-                Status.INVALID_ARGUMENT.withDescription("endpoint must not be blank")
-            )
+            throw ErrorSanitizer.validationError("endpoint must not be blank")
         }
         val cost = if (request.cost <= 0) 1L else minOf(request.cost, 10_000L) // cap at 10k to prevent overflow
 

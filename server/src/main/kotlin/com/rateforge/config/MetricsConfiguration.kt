@@ -38,6 +38,7 @@ class RateForgeMetrics(private val meterRegistry: MeterRegistry) {
     private val circuitBreakerState = AtomicInteger(0) // 0=CLOSED, 1=OPEN, 2=HALF_OPEN
     private val analyticsQueueDepth = AtomicLong(0)
     private val policyCacheSize = AtomicLong(0)
+    private val deadLetterQueueDepth = AtomicLong(0)
 
     // Decision metrics
     fun recordDecision(algorithm: String, decision: String): Timer.Sample {
@@ -93,6 +94,18 @@ class RateForgeMetrics(private val meterRegistry: MeterRegistry) {
             .increment()
     }
 
+    // Dead letter queue metrics
+    fun setDeadLetterQueueDepth(depth: Long) {
+        deadLetterQueueDepth.set(depth)
+    }
+
+    fun incrementDlqEvents() {
+        Counter.builder("rateforge.analytics.dlq_events")
+            .description("Events moved to dead letter queue after max retries")
+            .register(meterRegistry)
+            .increment()
+    }
+
     init {
         // Register gauge metrics that track atomic values
         Gauge.builder("rateforge.circuit_breaker.state") { circuitBreakerState.get().toDouble() }
@@ -105,6 +118,10 @@ class RateForgeMetrics(private val meterRegistry: MeterRegistry) {
 
         Gauge.builder("rateforge.policy_cache.size") { policyCacheSize.get().toDouble() }
             .description("Number of cached policies")
+            .register(meterRegistry)
+
+        Gauge.builder("rateforge.analytics.dlq.depth") { deadLetterQueueDepth.get().toDouble() }
+            .description("Current dead letter queue size")
             .register(meterRegistry)
     }
 }
