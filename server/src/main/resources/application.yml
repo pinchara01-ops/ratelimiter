@@ -63,6 +63,11 @@ rateforge:
   metrics-auth:
     user: ${METRICS_USER:metrics}
     password: ${METRICS_PASSWORD:metrics}
+  timeouts:
+    redis-command-ms: ${REDIS_TIMEOUT_MS:100}
+    redis-connect-ms: ${REDIS_CONNECT_TIMEOUT_MS:1000}
+    database-query-ms: ${DB_QUERY_TIMEOUT_MS:5000}
+    grpc-request-ms: ${GRPC_REQUEST_TIMEOUT_MS:10000}
 
 logging:
   level:

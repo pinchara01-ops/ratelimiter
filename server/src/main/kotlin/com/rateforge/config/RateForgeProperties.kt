@@ -12,7 +12,8 @@ data class RateForgeProperties(
     val policyCacheRefreshIntervalMs: Long = 30000L,
 
     val circuitBreaker: CircuitBreakerProperties = CircuitBreakerProperties(),
-    val analytics: AnalyticsProperties = AnalyticsProperties()
+    val analytics: AnalyticsProperties = AnalyticsProperties(),
+    val timeouts: TimeoutProperties = TimeoutProperties()
 ) {
     enum class NoMatchBehaviorConfig {
         FAIL_OPEN, FAIL_CLOSED
@@ -29,5 +30,16 @@ data class RateForgeProperties(
         val queueCapacity: Int = 10000,
         val flushIntervalMs: Long = 500L,
         val flushBatchSize: Int = 1000
+    )
+
+    data class TimeoutProperties(
+        /** Redis command timeout in milliseconds */
+        val redisCommandMs: Long = 100L,
+        /** Redis connection timeout in milliseconds */
+        val redisConnectMs: Long = 1000L,
+        /** Database query timeout in milliseconds */
+        val databaseQueryMs: Long = 5000L,
+        /** gRPC request deadline in milliseconds (0 = no deadline) */
+        val grpcRequestMs: Long = 10000L
     )
 }
