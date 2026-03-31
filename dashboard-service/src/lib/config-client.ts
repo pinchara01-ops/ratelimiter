@@ -38,13 +38,13 @@ function call<T>(method: string, req: unknown): Promise<T> {
 }
 
 // ── Types (aligned to proto/config.proto PolicyProto) ─────────────────────────
-// Re-exported from config-types.ts so Client Components can import types
-// without pulling in this gRPC-heavy module.
-export type {
+// Import types for local use, then re-export for consumers
+import type {
   AlgorithmType,
   NoMatchBehavior,
   PolicyDto,
 } from "./config-types";
+export type { AlgorithmType, NoMatchBehavior, PolicyDto };
 export { algorithmLabel } from "./config-types";
 
 // ── API wrappers ──────────────────────────────────────────────────────────────
