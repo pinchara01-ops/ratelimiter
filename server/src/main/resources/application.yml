@@ -72,5 +72,8 @@ rateforge:
 logging:
   level:
     com.rateforge: INFO
+    com.rateforge.logging: DEBUG
     io.grpc: WARN
     org.springframework.data.redis: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-}] %-5level %logger{36} - %msg%n"
