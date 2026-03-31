@@ -60,6 +60,9 @@ rateforge:
     enabled: ${AUTH_ENABLED:false}
     api-keys: ${AUTH_API_KEYS:}
     api-key-header: x-api-key
+  metrics-auth:
+    user: ${METRICS_USER:metrics}
+    password: ${METRICS_PASSWORD:metrics}
 
 logging:
   level:
