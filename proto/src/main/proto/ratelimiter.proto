@@ -26,6 +26,7 @@ message CheckLimitResponse {
   int64 reset_at_ms = 3;
   string policy_id = 4;
   string reason = 5;
+  int64 limit = 6;
 }
 
 message BatchCheckRequest {
