@@ -94,6 +94,22 @@ class RateForgeMetrics(private val meterRegistry: MeterRegistry) {
             .increment()
     }
 
+    // Policy cache circuit breaker metrics
+    fun incrementPolicyCacheCircuitBreakerTransition(toState: String) {
+        Counter.builder("rateforge.policy_cache.circuit_breaker.transitions")
+            .tag("to_state", toState)
+            .description("Policy cache circuit breaker state transitions")
+            .register(meterRegistry)
+            .increment()
+    }
+
+    fun incrementPolicyCacheCircuitBreakerFallback() {
+        Counter.builder("rateforge.policy_cache.circuit_breaker.fallbacks")
+            .description("Times policy cache served stale data due to circuit breaker")
+            .register(meterRegistry)
+            .increment()
+    }
+
     // Dead letter queue metrics
     fun setDeadLetterQueueDepth(depth: Long) {
         deadLetterQueueDepth.set(depth)
