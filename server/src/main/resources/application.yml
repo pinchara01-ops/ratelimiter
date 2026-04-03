@@ -37,10 +37,21 @@ management:
   endpoint:
     health:
       show-details: always
+      show-components: always
+      group:
+        readiness:
+          include: redis,database,circuitBreaker
+        liveness:
+          include: ping
     metrics:
       enabled: true
     prometheus:
       enabled: true
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: false  # Using custom DatabaseHealthIndicator
   metrics:
     export:
       prometheus:
