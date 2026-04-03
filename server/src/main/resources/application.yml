@@ -29,6 +29,9 @@ grpc:
 management:
   server:
     port: 9091
+  observations:
+    annotations:
+      enabled: false
   endpoints:
     web:
       exposure:
