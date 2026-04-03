@@ -55,7 +55,7 @@ export default function StatsCards({ stats, loading }: Props) {
     );
   }
 
-  const denyPct = (stats.denyRate * 100).toFixed(1);
+  const denyPct = ((stats.denyRate ?? 0) * 100).toFixed(1);
 
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
@@ -82,7 +82,7 @@ export default function StatsCards({ stats, loading }: Props) {
       />
       <Card
         label="Avg Latency"
-        value={`${stats.avgLatencyMs.toFixed(2)} ms`}
+        value={`${(stats.avgLatencyMs ?? 0).toFixed(2)} ms`}
         sub="per decision"
         accent="gray"
       />

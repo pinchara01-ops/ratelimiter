@@ -4,8 +4,8 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.spring")
     id("com.google.protobuf")
-    id("org.springframework.boot") version "3.2.4"
-    id("io.spring.dependency-management") version "1.1.4"
+    id("org.springframework.boot")
+    id("io.spring.dependency-management")
 }
 
 val grpcVersion = "1.62.2"
@@ -30,10 +30,8 @@ dependencies {
     implementation("com.google.protobuf:protobuf-kotlin:$protobufVersion")
     implementation("net.devh:grpc-server-spring-boot-starter:2.15.0.RELEASE")
 
-    // PostgreSQL + Flyway
+    // PostgreSQL (read-only — server/ owns migrations, Flyway disabled here)
     runtimeOnly("org.postgresql:postgresql")
-    implementation("org.flywaydb:flyway-core")
-    runtimeOnly("org.flywaydb:flyway-database-postgresql")
 
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")

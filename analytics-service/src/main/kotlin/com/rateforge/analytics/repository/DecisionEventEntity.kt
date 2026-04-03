@@ -1,49 +1,31 @@
 package com.rateforge.analytics.repository
 
-import com.rateforge.analytics.pipeline.Algorithm
-import com.rateforge.analytics.pipeline.DecisionResult
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
-import jakarta.persistence.EnumType
-import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Index
 import jakarta.persistence.Table
 import java.time.Instant
+import java.util.UUID
 
+/**
+ * Read-only JPA projection of the decision_events table.
+ * Write side lives in server/ (AnalyticsPipeline → BatchProcessor → PostgreSQL).
+ * Schema matches server/src/main/resources/db/migration/V1__create_policies.sql
+ */
 @Entity
 @Table(
     name = "decision_events",
-    indexes = [
-        Index(name = "idx_decision_events_policy_id", columnList = "policy_id"),
-        Index(name = "idx_decision_events_client_key", columnList = "client_key"),
-        Index(name = "idx_decision_events_timestamp", columnList = "timestamp_ms"),
-    ]
+    indexes = [Index(name = "idx_decision_events_occurred_at", columnList = "occurred_at")]
 )
 data class DecisionEventEntity(
-    @Id
-    val id: String,
-
-    @Column(name = "timestamp_ms", nullable = false)
-    val timestampMs: Long,
-
-    @Column(name = "client_key", nullable = false)
-    val clientKey: String,
-
-    @Column(name = "endpoint", nullable = false)
-    val endpoint: String,
-
-    @Column(name = "policy_id", nullable = false)
-    val policyId: String,
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "algorithm", nullable = false)
-    val algorithm: Algorithm,
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "decision", nullable = false)
-    val decision: DecisionResult,
-
-    @Column(name = "latency_ms", nullable = false)
-    val latencyMs: Double,
+    @Id val id: UUID,
+    @Column(name = "client_id",  nullable = false) val clientId: String,
+    @Column(name = "endpoint",   nullable = false) val endpoint: String,
+    @Column(name = "method")                       val method: String?,
+    @Column(name = "policy_id")                    val policyId: UUID?,
+    @Column(name = "allowed",    nullable = false) val allowed: Boolean,
+    @Column(name = "reason",     nullable = false) val reason: String,
+    @Column(name = "latency_us")                   val latencyUs: Long?,
+    @Column(name = "occurred_at",nullable = false) val occurredAt: Instant,
 )

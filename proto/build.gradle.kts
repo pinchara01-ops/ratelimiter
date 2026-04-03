@@ -50,3 +50,7 @@ sourceSets {
         }
     }
 }
+
+tasks.withType<Copy> {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

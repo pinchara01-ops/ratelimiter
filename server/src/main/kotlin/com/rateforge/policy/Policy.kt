@@ -59,6 +59,9 @@ class PolicyEntity(
     @Column(nullable = false)
     var enabled: Boolean = true,
 
+    @Column(name = "soft_limit")
+    var softLimit: Long? = null,
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     var createdAt: Instant = Instant.now(),
@@ -83,6 +86,7 @@ data class Policy(
     val priority: Int,
     val noMatchBehavior: NoMatchBehavior? = null,
     val enabled: Boolean = true,
+    val softLimit: Long? = null,
     val createdAt: Instant,
     val updatedAt: Instant
 )
@@ -102,6 +106,7 @@ fun PolicyEntity.toDomain(): Policy = Policy(
     priority = priority,
     noMatchBehavior = noMatchBehavior,
     enabled = enabled,
+    softLimit = softLimit,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

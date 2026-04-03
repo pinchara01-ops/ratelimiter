@@ -10,6 +10,7 @@ import com.rateforge.analytics.DecisionEvent
 import com.rateforge.analytics.DecisionReason
 import com.rateforge.circuit.CircuitBreaker
 import com.rateforge.circuit.CircuitState
+import com.rateforge.config.RateForgeMetrics
 import com.rateforge.config.RateForgeProperties
 import com.rateforge.hotkey.LocalPreCounter
 import com.rateforge.policy.NoMatchBehavior
@@ -28,7 +29,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.runBlocking
 import net.devh.boot.grpc.server.service.GrpcService
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -43,45 +43,44 @@ class RateLimiterGrpcService(
     private val tokenBucketExecutor: TokenBucketExecutor,
     private val analyticsPipeline: AnalyticsPipeline,
     private val properties: RateForgeProperties,
-    private val localPreCounter: LocalPreCounter
+    private val localPreCounter: LocalPreCounter,
+    private val metrics: RateForgeMetrics
 ) : RateLimiterServiceGrpcKt.RateLimiterServiceCoroutineImplBase() {
 
     private val log = LoggerFactory.getLogger(RateLimiterGrpcService::class.java)
 
-    override suspend fun checkLimit(request: CheckLimitRequest): CheckLimitResponse =
-        processSingleCheck(request)
+    override suspend fun checkLimit(request: CheckLimitRequest): CheckLimitResponse {
+        val response = processSingleCheck(request)
+        if (!response.allowed && response.reason == DecisionReason.RATE_LIMITED) {
+            throw Status.RESOURCE_EXHAUSTED
+                .withDescription("rate limit exceeded; retry after ${response.resetAtMs}ms")
+                .asRuntimeException()
+        }
+        return response
+    }
 
     override suspend fun batchCheck(request: BatchCheckRequest): BatchCheckResponse {
         return try {
-            val results = runBlocking {
-                coroutineScope {
-                    request.requestsList.map { req ->
-                        async(Dispatchers.IO) { processSingleCheck(req) }
-                    }.awaitAll()
-                }
+            val results = coroutineScope {
+                request.requestsList.map { req ->
+                    async(Dispatchers.IO) { processSingleCheck(req) }
+                }.awaitAll()
             }
             batchCheckResponse {
-                this.responses += results
+                this.addAllResponses(results)
             }
         } catch (e: Exception) {
-            log.error("batchCheck failed", e)
-            throw io.grpc.StatusRuntimeException(
-                Status.INTERNAL.withDescription("batch check failed")
-            )
+            throw ErrorSanitizer.internalError(e, "batchCheck")
         }
     }
 
     private suspend fun processSingleCheck(request: CheckLimitRequest): CheckLimitResponse {
         // MAJ-7: Validate inputs
         if (request.clientId.isBlank()) {
-            throw io.grpc.StatusRuntimeException(
-                Status.INVALID_ARGUMENT.withDescription("client_id must not be blank")
-            )
+            throw ErrorSanitizer.validationError("client_id must not be blank")
         }
         if (request.endpoint.isBlank()) {
-            throw io.grpc.StatusRuntimeException(
-                Status.INVALID_ARGUMENT.withDescription("endpoint must not be blank")
-            )
+            throw ErrorSanitizer.validationError("endpoint must not be blank")
         }
         val cost = if (request.cost <= 0) 1L else minOf(request.cost, 10_000L) // cap at 10k to prevent overflow
 
@@ -97,6 +96,10 @@ class RateLimiterGrpcService(
             val allowed = behavior == RateForgeProperties.NoMatchBehaviorConfig.FAIL_OPEN
             val reason = DecisionReason.CIRCUIT_OPEN
 
+            // Record decision metrics
+            val timerSample = metrics.recordDecision("", "circuit_open")
+            metrics.recordDecisionLatency(timerSample)
+
             recordEvent(clientId, endpoint, method, null, allowed, reason, latencyUs)
 
             return checkLimitResponse {
@@ -105,6 +108,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = ""
                 this.reason = reason
+                limit = -1
             }
         }
 
@@ -118,6 +122,11 @@ class RateLimiterGrpcService(
             val allowed = defaultBehavior == RateForgeProperties.NoMatchBehaviorConfig.FAIL_OPEN
             val reason = if (allowed) DecisionReason.NO_POLICY_FAIL_OPEN else DecisionReason.NO_POLICY_FAIL_CLOSED
 
+            // Record decision metrics  
+            val decision = if (allowed) "no_policy_fail_open" else "no_policy_fail_closed"
+            val timerSample = metrics.recordDecision("", decision)
+            metrics.recordDecisionLatency(timerSample)
+
             recordEvent(clientId, endpoint, method, null, allowed, reason, latencyUs)
 
             return checkLimitResponse {
@@ -126,6 +135,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = ""
                 this.reason = reason
+                limit = -1
             }
         }
 
@@ -134,6 +144,12 @@ class RateLimiterGrpcService(
         localPreCounter.recordRequest(hotKey)
         if (localPreCounter.isHotKey(hotKey) && localPreCounter.tryConsumeLocal(hotKey)) {
             val latencyUs = (System.nanoTime() - startNs) / 1000
+            
+            // Record hot-key pre-denial metrics
+            metrics.incrementHotkeyPreDenied()
+            val timerSample = metrics.recordDecision(policy.algorithm.name, "allowed")
+            metrics.recordDecisionLatency(timerSample)
+            
             recordEvent(clientId, endpoint, method, policy, true, DecisionReason.ALLOWED, latencyUs)
             return checkLimitResponse {
                 allowed = true
@@ -141,6 +157,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = policy.id.toString()
                 reason = DecisionReason.ALLOWED
+                limit = policy.limit
             }
         }
 
@@ -173,6 +190,16 @@ class RateLimiterGrpcService(
             else -> DecisionReason.RATE_LIMITED
         }
 
+        // Record decision metrics
+        val decision = when (reason) {
+            DecisionReason.CIRCUIT_OPEN -> "circuit_open"
+            DecisionReason.ALLOWED -> "allowed"
+            DecisionReason.RATE_LIMITED -> "rate_limited"
+            else -> "other"
+        }
+        val timerSample = metrics.recordDecision(policy.algorithm.name, decision)
+        metrics.recordDecisionLatency(timerSample)
+
         // If the key was served by Redis successfully and it's hot, grant a local budget batch
         if (!isCircuitOpen && localPreCounter.isHotKey(hotKey)) {
             localPreCounter.grantBudget(hotKey, localPreCounter.batchSize)
@@ -180,12 +207,18 @@ class RateLimiterGrpcService(
 
         recordEvent(clientId, endpoint, method, policy, result.allowed, reason, latencyUs)
 
+        // Soft rate limiting: flag as throttled if usage exceeds soft_limit but is still allowed
+        val throttled = result.allowed && policy.softLimit != null && policy.softLimit > 0 &&
+            (policy.limit - result.remaining) > policy.softLimit
+
         return checkLimitResponse {
             allowed = result.allowed
             remaining = result.remaining
             resetAtMs = result.resetAtMs
             policyId = policy.id.toString()
             this.reason = reason
+            limit = policy.limit
+            this.throttled = throttled
         }
     }
 
@@ -239,6 +272,7 @@ class RateLimiterGrpcService(
                         refillRate = refillRate
                     )
                 }
+                else -> throw IllegalStateException("Unsupported algorithm type: ${policy.algorithm}")
             }
         } catch (e: Exception) {
             log.error("getLimitStatus Redis query failed for client={} endpoint={}", clientId, endpoint, e)
@@ -289,6 +323,7 @@ class RateLimiterGrpcService(
                     cost = cost
                 )
             }
+            else -> throw IllegalStateException("Unsupported algorithm type: ${policy.algorithm}")
         }
     }
 

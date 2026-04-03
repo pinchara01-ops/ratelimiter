@@ -21,6 +21,11 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-security")
+
+    // Metrics
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // Kotlin
     implementation("org.jetbrains.kotlin:kotlin-reflect")
@@ -38,11 +43,12 @@ dependencies {
 
     // Database
     runtimeOnly("org.postgresql:postgresql")
-    implementation("org.flywaydb:flyway-core")
-    implementation("org.flywaydb:flyway-database-postgresql")
+    implementation("org.flywaydb:flyway-core:10.10.0")
+    implementation("org.flywaydb:flyway-database-postgresql:10.10.0")
 
     // Redis
     implementation("io.lettuce:lettuce-core")
+    implementation("org.apache.commons:commons-pool2:2.12.0")
 
     // Caffeine — bounded cache for LocalPreCounter hot-key slots
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
@@ -53,11 +59,15 @@ dependencies {
 
     // Test
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
     testImplementation("io.mockk:mockk:$mockKVersion")
     testImplementation("org.testcontainers:testcontainers:$testcontainersVersion")
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("com.redis:testcontainers-redis:2.2.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
+    
+    // gRPC testing
+    testImplementation("io.grpc:grpc-testing:$grpcVersion")
 }
 
 tasks.withType<KotlinCompile> {

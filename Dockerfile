@@ -1,4 +1,5 @@
-FROM eclipse-temurin:21-jdk-alpine AS builder
+# Use non-Alpine for builder (gRPC protoc plugin requires glibc)
+FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
 

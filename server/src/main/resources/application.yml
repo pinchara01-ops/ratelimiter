@@ -18,12 +18,44 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      ssl:
+        enabled: ${REDIS_SSL:false}
 
 grpc:
   server:
     port: ${GRPC_PORT:9090}
-    security:
-      enabled: false
+
+management:
+  server:
+    port: 9091
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+      show-components: always
+      group:
+        readiness:
+          include: redis,database,circuitBreaker
+        liveness:
+          include: ping
+    metrics:
+      enabled: true
+    prometheus:
+      enabled: true
+  health:
+    redis:
+      enabled: true
+    db:
+      enabled: false  # Using custom DatabaseHealthIndicator
+  metrics:
+    export:
+      prometheus:
+        enabled: true
 
 rateforge:
   default-no-match-behavior: FAIL_OPEN
@@ -37,9 +69,51 @@ rateforge:
     queue-capacity: 10000
     flush-interval-ms: 500
     flush-batch-size: 1000
+    retention-days: 90
+  auth:
+    enabled: ${AUTH_ENABLED:false}
+    api-keys: ${AUTH_API_KEYS:}
+    api-key-header: x-api-key
+  metrics-auth:
+    user: ${METRICS_USER:metrics}
+    password: ${METRICS_PASSWORD:metrics}
+  timeouts:
+    redis-command-ms: ${REDIS_TIMEOUT_MS:100}
+    redis-connect-ms: ${REDIS_CONNECT_TIMEOUT_MS:1000}
+    database-query-ms: ${DB_QUERY_TIMEOUT_MS:5000}
+    grpc-request-ms: ${GRPC_REQUEST_TIMEOUT_MS:10000}
+  policy-cache:
+    refresh-interval-ms: 30000
+    circuit-breaker:
+      failure-threshold: 3
+      window-ms: 60000
+      probe-interval-ms: 30000
+      success-threshold: 2
+  shutdown:
+    timeout-ms: ${SHUTDOWN_TIMEOUT_MS:30000}
+    grace-period-ms: ${SHUTDOWN_GRACE_PERIOD_MS:5000}
+  redis:
+    io-threads: ${REDIS_IO_THREADS:4}
+    computation-threads: ${REDIS_COMPUTATION_THREADS:4}
+    pool:
+      min-idle: ${REDIS_POOL_MIN_IDLE:4}
+      max-idle: ${REDIS_POOL_MAX_IDLE:8}
+      max-total: ${REDIS_POOL_MAX_TOTAL:16}
+      max-wait-ms: ${REDIS_POOL_MAX_WAIT_MS:1000}
+      test-on-borrow: true
+      test-while-idle: true
+
+server:
+  shutdown: graceful
+
+spring.lifecycle:
+  timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT_MS:30000}ms
 
 logging:
   level:
     com.rateforge: INFO
+    com.rateforge.logging: DEBUG
     io.grpc: WARN
     org.springframework.data.redis: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%X{correlationId:-}] %-5level %logger{36} - %msg%n"

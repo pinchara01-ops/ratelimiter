@@ -1,0 +1,37 @@
+# Use non-Alpine for builder (gRPC protoc plugin requires glibc)
+FROM eclipse-temurin:21-jdk AS builder
+
+WORKDIR /app
+
+# Copy build files
+COPY settings.gradle.kts .
+COPY build.gradle.kts .
+COPY gradlew .
+COPY gradle/ gradle/
+COPY proto/ proto/
+COPY analytics-service/ analytics-service/
+
+# Build the analytics service
+RUN chmod +x gradlew && ./gradlew :analytics-service:bootJar --no-daemon -x test
+
+FROM eclipse-temurin:21-jre-alpine
+
+WORKDIR /app
+
+RUN addgroup -S rateforge && adduser -S rateforge -G rateforge
+
+COPY --from=builder /app/analytics-service/build/libs/*.jar app.jar
+
+RUN chown rateforge:rateforge app.jar
+
+USER rateforge
+
+EXPOSE 50052
+
+ENV DB_HOST=localhost DB_PORT=5432 DB_NAME=rateforge \
+    DB_USER=rateforge DB_PASSWORD=rateforge GRPC_PORT=50052
+
+ENTRYPOINT ["java", \
+  "-XX:+UseContainerSupport", \
+  "-XX:MaxRAMPercentage=75.0", \
+  "-jar", "app.jar"]

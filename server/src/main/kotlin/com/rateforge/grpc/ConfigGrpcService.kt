@@ -20,7 +20,6 @@ import com.rateforge.proto.NoMatchBehaviorProto
 import com.rateforge.proto.PolicyProto
 import com.rateforge.proto.PolicyResponse
 import com.rateforge.proto.UpdatePolicyRequest
-import io.grpc.Status
 import io.grpc.StatusRuntimeException
 import net.devh.boot.grpc.server.service.GrpcService
 import org.slf4j.LoggerFactory
@@ -36,55 +35,63 @@ class ConfigGrpcService(
     private val log = LoggerFactory.getLogger(ConfigGrpcService::class.java)
 
     override suspend fun createPolicy(request: CreatePolicyRequest): PolicyResponse {
-        if (request.name.isBlank()) {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Policy name is required"))
-        }
-        if (policyRepository.existsByName(request.name)) {
-            throw StatusRuntimeException(Status.ALREADY_EXISTS.withDescription("Policy with name '${request.name}' already exists"))
-        }
-
-        val algorithm = request.algorithm.toDomain()
-            ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
-
-        if (algorithm == AlgorithmType.TOKEN_BUCKET) {
-            if (request.bucketSize <= 0) {
-                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires bucketSize > 0"))
+        log.info("createPolicy called: name={} algorithm={}", request.name, request.algorithm)
+        try {
+            if (request.name.isBlank()) {
+                throw ErrorSanitizer.validationError("Policy name is required")
             }
-            if (request.refillRate <= 0.0) {
-                throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Token bucket requires refillRate > 0"))
+            if (policyRepository.existsByName(request.name)) {
+                throw ErrorSanitizer.alreadyExistsError("Policy", request.name)
             }
+
+            val algorithm = request.algorithm.toDomain()
+                ?: throw ErrorSanitizer.validationError("Invalid algorithm type")
+
+            if (algorithm == AlgorithmType.TOKEN_BUCKET) {
+                if (request.bucketSize <= 0) {
+                    throw ErrorSanitizer.validationError("Token bucket requires bucketSize > 0")
+                }
+                if (request.refillRate <= 0.0) {
+                    throw ErrorSanitizer.validationError("Token bucket requires refillRate > 0")
+                }
+            }
+
+            val entity = PolicyEntity(
+                name = request.name,
+                clientId = request.clientId.ifEmpty { "*" },
+                endpoint = request.endpoint.ifEmpty { "*" },
+                method = request.method.ifEmpty { "*" },
+                algorithm = algorithm,
+                limit = request.limit,
+                windowMs = request.windowMs,
+                bucketSize = if (request.bucketSize > 0) request.bucketSize else null,
+                refillRate = if (request.refillRate > 0.0) request.refillRate else null,
+                cost = if (request.cost > 0) request.cost else 1L,
+                priority = if (request.priority > 0) request.priority else 100,
+                noMatchBehavior = request.noMatchBehavior.toDomain(),
+                enabled = request.enabled,
+                softLimit = if (request.softLimit > 0) request.softLimit else null
+            )
+            log.info("createPolicy saving entity: algorithm={} limit={} windowMs={}", entity.algorithm, entity.limit, entity.windowMs)
+            val saved = policyRepository.save(entity)
+            policyCache.invalidate()
+
+            log.info("Created policy: id={} name={}", saved.id, saved.name)
+            return policyResponse { policy = saved.toDomain().toProto() }
+        } catch (ex: StatusRuntimeException) {
+            throw ex
+        } catch (ex: Exception) {
+            throw ErrorSanitizer.internalError(ex, "createPolicy")
         }
-
-        val entity = PolicyEntity(
-            name = request.name,
-            clientId = request.clientId.ifEmpty { "*" },
-            endpoint = request.endpoint.ifEmpty { "*" },
-            method = request.method.ifEmpty { "*" },
-            algorithm = algorithm,
-            limit = request.limit,
-            windowMs = request.windowMs,
-            bucketSize = if (request.bucketSize > 0) request.bucketSize else null,
-            refillRate = if (request.refillRate > 0.0) request.refillRate else null,
-            cost = if (request.cost > 0) request.cost else 1L,
-            priority = if (request.priority > 0) request.priority else 100,
-            noMatchBehavior = request.noMatchBehavior.toDomain(),
-            enabled = request.enabled
-        )
-
-        val saved = policyRepository.save(entity)
-        policyCache.invalidate()
-
-        log.info("Created policy: id={} name={}", saved.id, saved.name)
-        return policyResponse { policy = saved.toDomain().toProto() }
     }
 
     override suspend fun updatePolicy(request: UpdatePolicyRequest): PolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         val entity = policyRepository.findByIdOrNull(id)
-            ?: throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            ?: throw ErrorSanitizer.notFoundError("Policy")
 
         if (request.name.isNotBlank()) entity.name = request.name
         if (request.clientId.isNotBlank()) entity.clientId = request.clientId
@@ -92,7 +99,7 @@ class ConfigGrpcService(
         if (request.method.isNotBlank()) entity.method = request.method
         if (request.algorithm != AlgorithmTypeProto.ALGORITHM_TYPE_UNSPECIFIED) {
             entity.algorithm = request.algorithm.toDomain()
-                ?: throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid algorithm type"))
+                ?: throw ErrorSanitizer.validationError("Invalid algorithm type")
         }
         if (request.limit > 0) entity.limit = request.limit
         if (request.windowMs > 0) entity.windowMs = request.windowMs
@@ -108,6 +115,10 @@ class ConfigGrpcService(
         if (request.enabled) {
             entity.enabled = true
         }
+        // Soft limit: 0 means clear, > 0 means set
+        if (request.softLimit > 0) {
+            entity.softLimit = request.softLimit
+        }
 
         val saved = policyRepository.save(entity)
         policyCache.invalidate()
@@ -118,11 +129,11 @@ class ConfigGrpcService(
 
     override suspend fun deletePolicy(request: DeletePolicyRequest): DeletePolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         if (!policyRepository.existsById(id)) {
-            throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            throw ErrorSanitizer.notFoundError("Policy")
         }
 
         policyRepository.deleteById(id)
@@ -137,11 +148,11 @@ class ConfigGrpcService(
 
     override suspend fun getPolicy(request: GetPolicyRequest): PolicyResponse {
         val id = runCatching { UUID.fromString(request.id) }.getOrElse {
-            throw StatusRuntimeException(Status.INVALID_ARGUMENT.withDescription("Invalid policy ID format"))
+            throw ErrorSanitizer.validationError("Invalid policy ID format")
         }
 
         val entity = policyRepository.findByIdOrNull(id)
-            ?: throw StatusRuntimeException(Status.NOT_FOUND.withDescription("Policy not found: ${request.id}"))
+            ?: throw ErrorSanitizer.notFoundError("Policy")
 
         return policyResponse { policy = entity.toDomain().toProto() }
     }
@@ -213,6 +224,7 @@ fun Policy.toProto(): PolicyProto = PolicyProto.newBuilder()
     .setPriority(priority)
     .setNoMatchBehavior(noMatchBehavior?.toProto() ?: NoMatchBehaviorProto.NO_MATCH_BEHAVIOR_UNSPECIFIED)
     .setEnabled(enabled)
+    .setSoftLimit(softLimit ?: 0L)
     .setCreatedAtMs(createdAt.toEpochMilli())
     .setUpdatedAtMs(updatedAt.toEpochMilli())
     .build()

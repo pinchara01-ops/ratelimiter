@@ -1,0 +1,75 @@
+# Render.com Blueprint for RateForge
+# Deploy: https://render.com/deploy?repo=https://github.com/pinchara01-ops/ratelimiter
+#
+# IMPORTANT: After deploying, add REDIS_HOST manually in Render dashboard:
+# 1. Sign up at https://upstash.com (free Redis)
+# 2. Create a Redis database  
+# 3. Copy the host (e.g., cute-moose-12345.upstash.io)
+# 4. Add REDIS_HOST and REDIS_PASSWORD to rateforge-server environment variables
+
+databases:
+  - name: rateforge-db
+    plan: free
+    databaseName: rateforge
+    user: rateforge
+
+services:
+  # Main Rate Limiter Server (gRPC + REST)
+  - type: web
+    name: rateforge-server
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: GRPC_PORT
+        value: "9090"
+      - key: DB_HOST
+        fromDatabase:
+          name: rateforge-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: rateforge-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: rateforge-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: rateforge-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: rateforge-db
+          property: password
+      - key: REDIS_PORT
+        value: "6379"
+      # Add these manually after getting Upstash Redis:
+      # - REDIS_HOST: your-redis.upstash.io
+      # - REDIS_PASSWORD: your-upstash-password
+
+  # Analytics Service
+  - type: web
+    name: rateforge-analytics
+    runtime: docker
+    dockerfilePath: ./Dockerfile.analytics
+    plan: free
+    envVars:
+      - key: GRPC_PORT
+        value: "50052"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rateforge-db
+          property: connectionString
+      - key: DATABASE_USER
+        fromDatabase:
+          name: rateforge-db
+          property: user
+      - key: DATABASE_PASSWORD
+        fromDatabase:
+          name: rateforge-db
+          property: password
