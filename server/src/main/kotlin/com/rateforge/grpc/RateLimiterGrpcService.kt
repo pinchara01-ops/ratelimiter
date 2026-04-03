@@ -49,8 +49,15 @@ class RateLimiterGrpcService(
 
     private val log = LoggerFactory.getLogger(RateLimiterGrpcService::class.java)
 
-    override suspend fun checkLimit(request: CheckLimitRequest): CheckLimitResponse =
-        processSingleCheck(request)
+    override suspend fun checkLimit(request: CheckLimitRequest): CheckLimitResponse {
+        val response = processSingleCheck(request)
+        if (!response.allowed && response.reason == DecisionReason.RATE_LIMITED) {
+            throw Status.RESOURCE_EXHAUSTED
+                .withDescription("rate limit exceeded; retry after ${response.resetAtMs}ms")
+                .asRuntimeException()
+        }
+        return response
+    }
 
     override suspend fun batchCheck(request: BatchCheckRequest): BatchCheckResponse {
         return try {
