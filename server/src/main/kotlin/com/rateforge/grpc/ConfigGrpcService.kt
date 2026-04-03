@@ -69,7 +69,8 @@ class ConfigGrpcService(
                 cost = if (request.cost > 0) request.cost else 1L,
                 priority = if (request.priority > 0) request.priority else 100,
                 noMatchBehavior = request.noMatchBehavior.toDomain(),
-                enabled = request.enabled
+                enabled = request.enabled,
+                softLimit = if (request.softLimit > 0) request.softLimit else null
             )
             log.info("createPolicy saving entity: algorithm={} limit={} windowMs={}", entity.algorithm, entity.limit, entity.windowMs)
             val saved = policyRepository.save(entity)
@@ -113,6 +114,10 @@ class ConfigGrpcService(
         // Only update enabled if the request explicitly sends true (proto3 bool default is false = "not set")
         if (request.enabled) {
             entity.enabled = true
+        }
+        // Soft limit: 0 means clear, > 0 means set
+        if (request.softLimit > 0) {
+            entity.softLimit = request.softLimit
         }
 
         val saved = policyRepository.save(entity)
@@ -219,6 +224,7 @@ fun Policy.toProto(): PolicyProto = PolicyProto.newBuilder()
     .setPriority(priority)
     .setNoMatchBehavior(noMatchBehavior?.toProto() ?: NoMatchBehaviorProto.NO_MATCH_BEHAVIOR_UNSPECIFIED)
     .setEnabled(enabled)
+    .setSoftLimit(softLimit ?: 0L)
     .setCreatedAtMs(createdAt.toEpochMilli())
     .setUpdatedAtMs(updatedAt.toEpochMilli())
     .build()
