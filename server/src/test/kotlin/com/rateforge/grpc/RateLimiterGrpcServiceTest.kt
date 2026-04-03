@@ -158,15 +158,16 @@ class RateLimiterGrpcServiceTest {
     }
     
     @Test
-    fun `checkLimit should return denied when over limit`() = runBlocking {
+    fun `checkLimit should throw RESOURCE_EXHAUSTED when over limit`() = runBlocking {
         // Given
         val policy = createTestPolicy()
+        val resetAtMs = System.currentTimeMillis() + 60000
         val request = checkLimitRequest {
             clientId = "test-client"
             endpoint = "/api/test"
             method = "GET"
         }
-        
+
         every { circuitBreaker.getState() } returns CircuitState.CLOSED
         every { policyCache.getPolicies() } returns listOf(policy)
         every { policyMatcher.findMatchingPolicy(any(), any(), any(), any()) } returns policy
@@ -175,17 +176,17 @@ class RateLimiterGrpcServiceTest {
             val operation = firstArg<() -> RateLimitResult>()
             operation()
         }
-        every { fixedWindowExecutor.checkLimit(any(), any(), any(), any(), any(), any()) } returns 
-            RateLimitResult(allowed = false, remaining = 0, resetAtMs = System.currentTimeMillis() + 60000)
-        
-        // When
-        val response = client.checkLimit(request)
-        
-        // Then
-        assertFalse(response.allowed)
-        assertEquals(0, response.remaining)
-        assertEquals(DecisionReason.RATE_LIMITED, response.reason)
-        
+        every { fixedWindowExecutor.checkLimit(any(), any(), any(), any(), any(), any()) } returns
+            RateLimitResult(allowed = false, remaining = 0, resetAtMs = resetAtMs)
+
+        // When & Then — checkLimit must throw RESOURCE_EXHAUSTED, not return allowed=false
+        val exception = assertThrows<StatusException> {
+            client.checkLimit(request)
+        }
+
+        assertEquals(Status.RESOURCE_EXHAUSTED.code, Status.fromThrowable(exception).code)
+        assertTrue(Status.fromThrowable(exception).description?.contains("retry after") == true)
+
         verify { analyticsPipeline.record(any()) }
         verify { metrics.recordDecision(policy.algorithm.name, "rate_limited") }
     }
