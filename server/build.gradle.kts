@@ -48,6 +48,7 @@ dependencies {
 
     // Redis
     implementation("io.lettuce:lettuce-core")
+    implementation("org.apache.commons:commons-pool2:2.12.0")
 
     // Caffeine — bounded cache for LocalPreCounter hot-key slots
     implementation("com.github.ben-manes.caffeine:caffeine:3.1.8")
