@@ -207,6 +207,10 @@ class RateLimiterGrpcService(
 
         recordEvent(clientId, endpoint, method, policy, result.allowed, reason, latencyUs)
 
+        // Soft rate limiting: flag as throttled if usage exceeds soft_limit but is still allowed
+        val throttled = result.allowed && policy.softLimit != null && policy.softLimit > 0 &&
+            (policy.limit - result.remaining) > policy.softLimit
+
         return checkLimitResponse {
             allowed = result.allowed
             remaining = result.remaining
@@ -214,6 +218,7 @@ class RateLimiterGrpcService(
             policyId = policy.id.toString()
             this.reason = reason
             limit = policy.limit
+            this.throttled = throttled
         }
     }
 

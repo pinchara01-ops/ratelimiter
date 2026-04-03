@@ -27,6 +27,8 @@ message CheckLimitResponse {
   string policy_id = 4;
   string reason = 5;
   int64 limit = 6;
+  // Soft rate limiting: true if usage exceeds soft_limit but not hard limit
+  bool throttled = 7;
 }
 
 message BatchCheckRequest {
