@@ -89,6 +89,15 @@ rateforge:
       window-ms: 60000
       probe-interval-ms: 30000
       success-threshold: 2
+  shutdown:
+    timeout-ms: ${SHUTDOWN_TIMEOUT_MS:30000}
+    grace-period-ms: ${SHUTDOWN_GRACE_PERIOD_MS:5000}
+
+server:
+  shutdown: graceful
+
+spring.lifecycle:
+  timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT_MS:30000}ms
 
 logging:
   level:
