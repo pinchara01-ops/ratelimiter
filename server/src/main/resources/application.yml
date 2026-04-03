@@ -29,6 +29,9 @@ grpc:
 management:
   server:
     port: 9091
+  observations:
+    annotations:
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -40,7 +43,7 @@ management:
       show-components: always
       group:
         readiness:
-          include: redis,database,circuitBreaker
+          include: redis,database,circuitBreakerHealth
         liveness:
           include: ping
     metrics:
@@ -74,9 +77,6 @@ rateforge:
     enabled: ${AUTH_ENABLED:false}
     api-keys: ${AUTH_API_KEYS:}
     api-key-header: x-api-key
-  metrics-auth:
-    user: ${METRICS_USER:metrics}
-    password: ${METRICS_PASSWORD:metrics}
   timeouts:
     redis-command-ms: ${REDIS_TIMEOUT_MS:100}
     redis-connect-ms: ${REDIS_CONNECT_TIMEOUT_MS:1000}

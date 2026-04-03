@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component
  * Health indicator for the circuit breaker state.
  * Reports the current state and provides insight into Redis connectivity.
  */
-@Component("circuitBreaker")
+@Component("circuitBreakerHealth")
 class CircuitBreakerHealthIndicator(
     private val circuitBreaker: CircuitBreaker
 ) : HealthIndicator {
