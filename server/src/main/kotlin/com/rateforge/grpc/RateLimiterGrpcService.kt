@@ -108,6 +108,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = ""
                 this.reason = reason
+                limit = -1
             }
         }
 
@@ -134,6 +135,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = ""
                 this.reason = reason
+                limit = -1
             }
         }
 
@@ -155,6 +157,7 @@ class RateLimiterGrpcService(
                 resetAtMs = 0
                 policyId = policy.id.toString()
                 reason = DecisionReason.ALLOWED
+                limit = policy.limit
             }
         }
 
@@ -210,6 +213,7 @@ class RateLimiterGrpcService(
             resetAtMs = result.resetAtMs
             policyId = policy.id.toString()
             this.reason = reason
+            limit = policy.limit
         }
     }
 
