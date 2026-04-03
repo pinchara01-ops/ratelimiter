@@ -2,6 +2,7 @@ package com.rateforge.logging
 
 import io.grpc.Context
 import io.grpc.Contexts
+import io.grpc.ForwardingServerCall
 import io.grpc.Metadata
 import io.grpc.ServerCall
 import io.grpc.ServerCallHandler
@@ -47,25 +48,29 @@ class CorrelationIdInterceptor : ServerInterceptor {
         next: ServerCallHandler<ReqT, RespT>
     ): ServerCall.Listener<ReqT> {
         // Extract or generate correlation ID
-        val correlationId = headers.get(CORRELATION_ID_HEADER_KEY) 
+        val correlationId = headers.get(CORRELATION_ID_HEADER_KEY)
             ?: UUID.randomUUID().toString()
-        
-        // Add correlation ID to response headers
-        val responseHeaders = Metadata()
-        responseHeaders.put(CORRELATION_ID_HEADER_KEY, correlationId)
-        call.sendHeaders(responseHeaders)
-        
+
         // Create new context with correlation ID
         val context = Context.current()
             .withValue(CORRELATION_ID_CONTEXT_KEY, correlationId)
-        
+
         // Extract method name for logging
         val methodName = call.methodDescriptor.fullMethodName
-        
-        // Wrap the call to set MDC on each message
+
+        // Wrap the call so the correlation ID is injected into response headers
+        // when sendHeaders is called by the framework (grpc-kotlin calls it once before sendMessage).
+        // Do NOT call sendHeaders eagerly here — a second call throws IllegalStateException → UNKNOWN.
+        val correlatedCall = object : ForwardingServerCall.SimpleForwardingServerCall<ReqT, RespT>(call) {
+            override fun sendHeaders(responseHeaders: Metadata) {
+                responseHeaders.put(CORRELATION_ID_HEADER_KEY, correlationId)
+                super.sendHeaders(responseHeaders)
+            }
+        }
+
         return Contexts.interceptCall(
             context,
-            call,
+            correlatedCall,
             headers,
             object : ServerCallHandler<ReqT, RespT> {
                 override fun startCall(
