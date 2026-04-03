@@ -71,6 +71,13 @@ rateforge:
     redis-connect-ms: ${REDIS_CONNECT_TIMEOUT_MS:1000}
     database-query-ms: ${DB_QUERY_TIMEOUT_MS:5000}
     grpc-request-ms: ${GRPC_REQUEST_TIMEOUT_MS:10000}
+  policy-cache:
+    refresh-interval-ms: 30000
+    circuit-breaker:
+      failure-threshold: 3
+      window-ms: 60000
+      probe-interval-ms: 30000
+      success-threshold: 2
 
 logging:
   level:
