@@ -92,6 +92,16 @@ rateforge:
   shutdown:
     timeout-ms: ${SHUTDOWN_TIMEOUT_MS:30000}
     grace-period-ms: ${SHUTDOWN_GRACE_PERIOD_MS:5000}
+  redis:
+    io-threads: ${REDIS_IO_THREADS:4}
+    computation-threads: ${REDIS_COMPUTATION_THREADS:4}
+    pool:
+      min-idle: ${REDIS_POOL_MIN_IDLE:4}
+      max-idle: ${REDIS_POOL_MAX_IDLE:8}
+      max-total: ${REDIS_POOL_MAX_TOTAL:16}
+      max-wait-ms: ${REDIS_POOL_MAX_WAIT_MS:1000}
+      test-on-borrow: true
+      test-while-idle: true
 
 server:
   shutdown: graceful
