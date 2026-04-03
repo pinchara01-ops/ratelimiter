@@ -24,6 +24,7 @@ export interface PolicyDto {
   priority: number;
   noMatchBehavior: NoMatchBehavior;
   enabled: boolean;
+  softLimit?: number; // Soft limit for throttling warnings (0 = disabled)
   createdAtMs: string;
   updatedAtMs: string;
 }

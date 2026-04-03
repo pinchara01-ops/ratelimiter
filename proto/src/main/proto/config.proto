@@ -44,6 +44,8 @@ message PolicyProto {
   bool enabled = 14;
   int64 created_at_ms = 15;
   int64 updated_at_ms = 16;
+  // Soft limit: warn when exceeded but still allow (0 = disabled)
+  int64 soft_limit = 17;
 }
 
 message CreatePolicyRequest {
@@ -60,6 +62,7 @@ message CreatePolicyRequest {
   int32 priority = 11;
   NoMatchBehaviorProto no_match_behavior = 12;
   bool enabled = 13;
+  int64 soft_limit = 14;
 }
 
 message UpdatePolicyRequest {
@@ -77,6 +80,7 @@ message UpdatePolicyRequest {
   int32 priority = 12;
   NoMatchBehaviorProto no_match_behavior = 13;
   bool enabled = 14;
+  int64 soft_limit = 15;
 }
 
 message DeletePolicyRequest {
